@@ -1,0 +1,91 @@
+import express from "express";
+import {createProxyMiddleware} from "http-proxy-middleware";
+import {spawn} from "node:child_process";
+import {mkdir, readFile, rename, writeFile} from "node:fs/promises";
+import path from "node:path";
+
+const port = Number(process.env.PORT || 3000);
+const appPort = Number(process.env.APP_INTERNAL_PORT || 3001);
+const dataDir = path.resolve(process.env.DATA_DIR || "data");
+const leadsFile = path.join(dataDir, "leads.json");
+const app = express();
+
+await mkdir(dataDir, {recursive: true});
+
+async function readLeads() {
+  try { return JSON.parse(await readFile(leadsFile, "utf8")); }
+  catch (error) { if (error.code === "ENOENT") return []; throw error; }
+}
+
+async function writeLeads(leads) {
+  const temporary = `${leadsFile}.tmp`;
+  await writeFile(temporary, JSON.stringify(leads, null, 2));
+  await rename(temporary, leadsFile);
+}
+
+function authorized(req) {
+  const expectedUser = process.env.ADMIN_USERNAME;
+  const expectedPassword = process.env.ADMIN_PASSWORD;
+  if (!expectedUser || !expectedPassword) return false;
+  const value = req.headers.authorization || "";
+  if (!value.startsWith("Basic ")) return false;
+  const [user, password] = Buffer.from(value.slice(6), "base64").toString().split(":");
+  return user === expectedUser && password === expectedPassword;
+}
+
+function protect(req, res, next) {
+  if (authorized(req)) return next();
+  res.set("WWW-Authenticate", 'Basic realm="Seti96 admin"');
+  return res.status(401).send("Требуется вход");
+}
+
+const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":"&lt;", ">":"&gt;", "&":"&amp;"})[char]);
+
+app.get("/health", (_req, res) => res.json({ok: true}));
+app.use("/admin", protect);
+app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
+app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
+  const body = req.body || {};
+  if (!body.name || !body.phone || !body.clientType || body.name.length > 100 || body.phone.length > 40) {
+    return res.status(400).json({error: "Проверьте данные"});
+  }
+  const leads = await readLeads();
+  const created = new Date().toISOString();
+  const lead = {
+    id: (leads[0]?.id || 0) + 1, created_at: created, name: body.name,
+    phone: body.phone, client_type: body.clientType, page: body.page || "",
+    status: "новая", telegram_status: "не настроен"
+  };
+  leads.unshift(lead);
+  await writeLeads(leads.slice(0, 2000));
+
+  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+    const details = [["Тип клиента",body.clientType],["Имя",body.name],["Телефон",body.phone],
+      ["Дата и время",new Date(created).toLocaleString("ru-RU",{timeZone:"Asia/Yekaterinburg"})],
+      ["Страница",body.page],["Источник",body.source],["Кампания",body.utm_campaign],
+      ["Объявление",body.utm_content],["Поисковый запрос",body.utm_term]].filter(([,value]) => value);
+    const text = ["<b>Новая заявка с Сети96.рф</b>", ...details.map(([key,value]) => `<b>${key}:</b> ${escapeHtml(value)}`)].join("\n");
+    try {
+      const result = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: "POST", headers: {"content-type":"application/json"},
+        body: JSON.stringify({chat_id: process.env.TELEGRAM_CHAT_ID, text, parse_mode: "HTML",
+          reply_markup: {inline_keyboard: [[{text:"Открыть заявку",url:`${req.protocol}://${req.get("host")}/admin`}]]}})
+      });
+      lead.telegram_status = result.ok ? "доставлено" : `ошибка ${result.status}`;
+    } catch { lead.telegram_status = "ошибка доставки"; }
+    await writeLeads(leads.slice(0, 2000));
+  }
+  return res.json({ok: true});
+});
+
+const child = spawn(process.execPath, ["node_modules/vinext/dist/cli.js", "start", "--port", String(appPort), "--hostname", "127.0.0.1"], {
+  stdio: "inherit", env: {...process.env, PORT: String(appPort)}
+});
+
+app.use(createProxyMiddleware({target: `http://127.0.0.1:${appPort}`, changeOrigin: false, ws: true}));
+const server = app.listen(port, "0.0.0.0", () => console.log(`Сети96 запущен на порту ${port}`));
+
+function stop(signal) { child.kill(signal); server.close(() => process.exit(0)); }
+process.on("SIGTERM", () => stop("SIGTERM"));
+process.on("SIGINT", () => stop("SIGINT"));
+child.on("exit", code => { if (code) process.exit(code); });

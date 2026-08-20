@@ -1,0 +1,2 @@
+import {integer,sqliteTable,text} from "drizzle-orm/sqlite-core";
+export const leads=sqliteTable("leads",{id:integer("id").primaryKey({autoIncrement:true}),createdAt:text("created_at").notNull(),name:text("name").notNull(),phone:text("phone").notNull(),clientType:text("client_type").notNull(),page:text("page"),status:text("status").notNull().default("новая"),telegramStatus:text("telegram_status").notNull().default("не настроен"),comment:text("comment")});

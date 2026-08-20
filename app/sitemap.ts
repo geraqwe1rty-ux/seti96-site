@@ -1,0 +1,1 @@
+import type {MetadataRoute} from "next"; export default function sitemap():MetadataRoute.Sitemap{return ["","/dom","/organizaciyam","/materialy","/kontakty","/politika"].map(p=>({url:`https://сети96.рф${p}`,lastModified:new Date()}))}
