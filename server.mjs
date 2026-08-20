@@ -6,7 +6,7 @@ import path from "node:path";
 
 const port = Number(process.env.PORT || 3000);
 const appPort = Number(process.env.APP_INTERNAL_PORT || 3001);
-const dataDir = path.resolve(process.env.DATA_DIR || "data");
+const dataDir = path.resolve(process.env.DATA_DIR || "/tmp/data");
 const leadsFile = path.join(dataDir, "leads.json");
 const app = express();
 
@@ -59,19 +59,15 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   leads.unshift(lead);
   await writeLeads(leads.slice(0, 2000));
 
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
-    const details = [["Тип клиента",body.clientType],["Имя",body.name],["Телефон",body.phone],
-      ["Дата и время",new Date(created).toLocaleString("ru-RU",{timeZone:"Asia/Yekaterinburg"})],
-      ["Страница",body.page],["Источник",body.source],["Кампания",body.utm_campaign],
-      ["Объявление",body.utm_content],["Поисковый запрос",body.utm_term]].filter(([,value]) => value);
-    const text = ["<b>Новая заявка с Сети96.рф</b>", ...details.map(([key,value]) => `<b>${key}:</b> ${escapeHtml(value)}`)].join("\n");
+  if (process.env.LEAD_RELAY_URL && process.env.LEAD_RELAY_SECRET) {
     try {
-      const result = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      const result = await fetch(process.env.LEAD_RELAY_URL.trim(), {
         method: "POST", headers: {"content-type":"application/json"},
-        body: JSON.stringify({chat_id: process.env.TELEGRAM_CHAT_ID, text, parse_mode: "HTML",
-          reply_markup: {inline_keyboard: [[{text:"Открыть заявку",url:`${req.protocol}://${req.get("host")}/admin`}]]}})
+        redirect: "follow",
+        body: JSON.stringify({...body, secret: process.env.LEAD_RELAY_SECRET.trim()})
       });
-      lead.telegram_status = result.ok ? "доставлено" : `ошибка ${result.status}`;
+      const relay = await result.json().catch(() => ({}));
+      lead.telegram_status = result.ok && relay.ok ? "доставлено" : `ошибка шлюза ${result.status}`;
     } catch { lead.telegram_status = "ошибка доставки"; }
     await writeLeads(leads.slice(0, 2000));
   }
