@@ -10,6 +10,7 @@ const dataDir = path.resolve(process.env.DATA_DIR || "/tmp/data");
 const leadsFile = path.join(dataDir, "leads.json");
 const electroDir = path.resolve("electro-static");
 const cameraDir = path.resolve("camera-static");
+const santehnikaDir = path.resolve("santehnika-static");
 const app = express();
 
 await mkdir(dataDir, {recursive: true});
@@ -47,6 +48,10 @@ function isElectroHost(req) {
 
 function isCameraHost(req) {
   return String(req.hostname || "").toLowerCase() === "camera.seti96.ru";
+}
+
+function isSantehnikaHost(req) {
+  return String(req.hostname || "").toLowerCase() === "santehnika.seti96.ru";
 }
 
 const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":"&lt;", ">":"&gt;", "&":"&amp;"})[char]);
@@ -90,6 +95,9 @@ app.use((req, res, next) => isElectroHost(req) ? express.static(electroDir, {ind
 app.get("/", (req, res, next) => isCameraHost(req) ? res.sendFile(path.join(cameraDir, "index.html")) : next());
 app.get("/politika", (req, res, next) => isCameraHost(req) ? res.sendFile(path.join(cameraDir, "politika.html")) : next());
 app.use((req, res, next) => isCameraHost(req) ? express.static(cameraDir, {index: false})(req, res,next) : next());
+app.get("/", (req, res, next) => isSantehnikaHost(req) ? res.sendFile(path.join(santehnikaDir, "index.html")) : next());
+app.get("/politika", (req, res, next) => isSantehnikaHost(req) ? res.sendFile(path.join(santehnikaDir, "politika.html")) : next());
+app.use((req, res, next) => isSantehnikaHost(req) ? express.static(santehnikaDir, {index: false})(req, res,next) : next());
 
 const child = spawn(process.execPath, ["node_modules/vinext/dist/cli.js", "start", "--port", String(appPort), "--hostname", "127.0.0.1"], {
   stdio: "inherit", env: {...process.env, PORT: String(appPort)}
