@@ -14,3 +14,4 @@
 .contact .region{margin-top:45px;padding:26px}
 .contact .region>span{font-size:52px}
 @media(max-width:900px){.contact h1{font-size:42px}.contactList>div{grid-template-columns:1fr;gap:8px;padding:20px 0}.contactList a{font-size:22px}}
+.agree a{text-decoration:underline;text-underline-offset:2px}
