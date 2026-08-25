@@ -9,6 +9,7 @@ const appPort = Number(process.env.APP_INTERNAL_PORT || 3001);
 const dataDir = path.resolve(process.env.DATA_DIR || "/tmp/data");
 const leadsFile = path.join(dataDir, "leads.json");
 const electroDir = path.resolve("electro-static");
+const cameraDir = path.resolve("camera-static");
 const app = express();
 
 await mkdir(dataDir, {recursive: true});
@@ -42,6 +43,10 @@ function protect(req, res, next) {
 
 function isElectroHost(req) {
   return String(req.hostname || "").toLowerCase() === "electro.seti96.ru";
+}
+
+function isCameraHost(req) {
+  return String(req.hostname || "").toLowerCase() === "camera.seti96.ru";
 }
 
 const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":"&lt;", ">":"&gt;", "&":"&amp;"})[char]);
@@ -82,6 +87,9 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
 app.get("/", (req, res, next) => isElectroHost(req) ? res.sendFile(path.join(electroDir, "index.html")) : next());
 app.get("/politika", (req, res, next) => isElectroHost(req) ? res.sendFile(path.join(electroDir, "politika.html")) : next());
 app.use((req, res, next) => isElectroHost(req) ? express.static(electroDir, {index: false})(req, res, next) : next());
+app.get("/", (req, res, next) => isCameraHost(req) ? res.sendFile(path.join(cameraDir, "index.html")) : next());
+app.get("/politika", (req, res, next) => isCameraHost(req) ? res.sendFile(path.join(cameraDir, "politika.html")) : next());
+app.use((req, res, next) => isCameraHost(req) ? express.static(cameraDir, {index: false})(req, res,next) : next());
 
 const child = spawn(process.execPath, ["node_modules/vinext/dist/cli.js", "start", "--port", String(appPort), "--hostname", "127.0.0.1"], {
   stdio: "inherit", env: {...process.env, PORT: String(appPort)}
