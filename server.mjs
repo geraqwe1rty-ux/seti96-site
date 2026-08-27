@@ -12,6 +12,7 @@ const electroDir = path.resolve("electro-static");
 const cameraDir = path.resolve("camera-static");
 const santehnikaDir = path.resolve("santehnika-static");
 const gromkayaSvyazDir = path.resolve("gromkaya-svyaz-static");
+const avariyaDir = path.resolve("avariya-static");
 const app = express();
 
 await mkdir(dataDir, {recursive: true});
@@ -57,6 +58,10 @@ function isSantehnikaHost(req) {
 
 function isGromkayaSvyazHost(req) {
   return String(req.hostname || "").toLowerCase() === "gromkaya-svyaz.seti96.ru";
+}
+
+function isAvariyaHost(req) {
+  return String(req.hostname || "").toLowerCase() === "avariya.seti96.ru";
 }
 
 const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":"&lt;", ">":"&gt;", "&":"&amp;"})[char]);
@@ -106,6 +111,9 @@ app.use((req, res, next) => isSantehnikaHost(req) ? express.static(santehnikaDir
 app.get("/", (req, res, next) => isGromkayaSvyazHost(req) ? res.sendFile(path.join(gromkayaSvyazDir, "index.html")) : next());
 app.get("/politika", (req, res, next) => isGromkayaSvyazHost(req) ? res.sendFile(path.join(gromkayaSvyazDir, "politika.html")) : next());
 app.use((req, res, next) => isGromkayaSvyazHost(req) ? express.static(gromkayaSvyazDir, {index: false})(req, res,next) : next());
+app.get("/", (req, res, next) => isAvariyaHost(req) ? res.sendFile(path.join(avariyaDir, "index.html")) : next());
+app.get("/politika", (req, res, next) => isAvariyaHost(req) ? res.sendFile(path.join(avariyaDir, "politika.html")) : next());
+app.use((req, res, next) => isAvariyaHost(req) ? express.static(avariyaDir, {index: false})(req, res,next) : next());
 
 const child = spawn(process.execPath, ["node_modules/vinext/dist/cli.js", "start", "--port", String(appPort), "--hostname", "127.0.0.1"], {
   stdio: "inherit", env: {...process.env, PORT: String(appPort)}
