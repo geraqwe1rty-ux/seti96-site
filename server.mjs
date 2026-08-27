@@ -10,7 +10,7 @@ const dataDir = path.resolve(process.env.DATA_DIR || "/tmp/data");
 const leadsFile = path.join(dataDir, "leads.json");
 const electroDir = path.resolve("electro-static");
 const cameraDir = path.resolve("camera-static");
-const santehnikaDir = path.resolve("santehnika-static");
+const santehnikaDir = path.resolve("santehnika-static");\nconst gromkayaSvyazDir = path.resolve("gromkaya-svyaz-static");
 const app = express();
 
 await mkdir(dataDir, {recursive: true});
@@ -97,7 +97,7 @@ app.get("/politika", (req, res, next) => isCameraHost(req) ? res.sendFile(path.j
 app.use((req, res, next) => isCameraHost(req) ? express.static(cameraDir, {index: false})(req, res,next) : next());
 app.get("/", (req, res, next) => isSantehnikaHost(req) ? res.sendFile(path.join(santehnikaDir, "index.html")) : next());
 app.get("/politika", (req, res, next) => isSantehnikaHost(req) ? res.sendFile(path.join(santehnikaDir, "politika.html")) : next());
-app.use((req, res, next) => isSantehnikaHost(req) ? express.static(santehnikaDir, {index: false})(req, res,next) : next());
+app.use((req, res, next) => isSantehnikaHost(req) ? express.static(santehnikaDir, {index: false})(req, res,next) : next());\napp.get("/", (req, res, next) => isGromkayaSvyazHost(req) ? res.sendFile(path.join(gromkayaSvyazDir, "index.html")) : next());\napp.get("/politika", (req, res, next) => isGromkayaSvyazHost(req) ? res.sendFile(path.join(gromkayaSvyazDir, "politika.html")) : next());\napp.use((req, res, next) => isGromkayaSvyazHost(req) ? express.static(gromkayaSvyazDir, {index: false})(req, res,next) : next());
 
 const child = spawn(process.execPath, ["node_modules/vinext/dist/cli.js", "start", "--port", String(appPort), "--hostname", "127.0.0.1"], {
   stdio: "inherit", env: {...process.env, PORT: String(appPort)}
