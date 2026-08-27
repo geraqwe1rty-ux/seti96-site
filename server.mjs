@@ -55,6 +55,10 @@ function isSantehnikaHost(req) {
   return String(req.hostname || "").toLowerCase() === "santehnika.seti96.ru";
 }
 
+function isGromkayaSvyazHost(req) {
+  return String(req.hostname || "").toLowerCase() === "gromkaya-svyaz.seti96.ru";
+}
+
 const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":"&lt;", ">":"&gt;", "&":"&amp;"})[char]);
 
 app.get("/health", (_req, res) => res.json({ok: true}));
