@@ -79,11 +79,19 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   if (!body.name || !body.phone || !body.clientType || body.name.length > 100 || body.phone.length > 40) {
     return res.status(400).json({error: "Проверьте данные"});
   }
+  if (body.service === "Прочистка канализации" && body.consent !== true) {
+    return res.status(400).json({error: "Необходимо согласие на обработку данных"});
+  }
   const leads = await readLeads();
   const created = new Date().toISOString();
   const lead = {
     id: (leads[0]?.id || 0) + 1, created_at: created, name: body.name,
     phone: body.phone, client_type: body.clientType, page: body.page || "",
+    service: body.service || "", address: body.address || "",
+    comment: body.problem || body.comment || "", form_place: body.formPlace || "",
+    consent_at: body.consent ? created : "", policy_version: body.policyVersion || "",
+    source: body.source || "", utm_campaign: body.utm_campaign || body.campaign || "",
+    utm_content: body.utm_content || "", utm_term: body.utm_term || "",
     status: "новая", telegram_status: "не настроен"
   };
   leads.unshift(lead);
@@ -94,7 +102,12 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
       const result = await fetch(process.env.LEAD_RELAY_URL.trim(), {
         method: "POST", headers: {"content-type":"application/json"},
         redirect: "follow",
-        body: JSON.stringify({...body, secret: process.env.LEAD_RELAY_SECRET.trim()})
+        body: JSON.stringify({
+          ...body,
+          leadId: lead.id,
+          adminUrl: `https://${req.hostname}/admin`,
+          secret: process.env.LEAD_RELAY_SECRET.trim()
+        })
       });
       const relay = await result.json().catch(() => ({}));
       lead.telegram_status = result.ok && relay.ok ? "доставлено" : `ошибка шлюза ${result.status}`;
@@ -120,7 +133,10 @@ app.get("/", (req, res, next) => isAvariyaHost(req) ? res.sendFile(path.join(ava
 app.get("/politika", (req, res, next) => isAvariyaHost(req) ? res.sendFile(path.join(avariyaDir, "politika.html")) : next());
 app.use((req, res, next) => isAvariyaHost(req) ? express.static(avariyaDir, {index: false})(req, res,next) : next());
 app.get("/", (req, res, next) => isProchistkaHost(req) ? res.sendFile(path.join(prochistkaDir, "index.html")) : next());
-app.get("/politika", (req, res, next) => isProchistkaHost(req) ? res.sendFile(path.join(prochistkaDir, "politika.html")) : next());
+app.get("/politika", (req, res, next) => isProchistkaHost(req) ? res.redirect(301, "/policy") : next());
+app.get("/policy", (req, res, next) => isProchistkaHost(req) ? res.sendFile(path.join(prochistkaDir, "policy.html")) : next());
+app.get("/consent", (req, res, next) => isProchistkaHost(req) ? res.sendFile(path.join(prochistkaDir, "consent.html")) : next());
+app.get("/cookies", (req, res, next) => isProchistkaHost(req) ? res.sendFile(path.join(prochistkaDir, "cookies.html")) : next());
 app.use((req, res, next) => isProchistkaHost(req) ? express.static(prochistkaDir, {index: false})(req, res,next) : next());
 
 const child = spawn(process.execPath, ["node_modules/vinext/dist/cli.js", "start", "--port", String(appPort), "--hostname", "127.0.0.1"], {
