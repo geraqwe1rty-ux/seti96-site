@@ -2,6 +2,8 @@ const METRIKA_ID = window.PROCHISTKA_METRIKA_ID;
 const COOKIE_KEY = "seti96_prochistka_cookie_choice";
 const selectedObjectInputs = document.querySelectorAll('[name="objectType"]');
 const objectButtons = document.querySelectorAll("[data-object-option]");
+const problemInputs = document.querySelectorAll('[name="problem"]');
+const problemButtons = document.querySelectorAll("[data-pick-problem]");
 const leadForms = document.querySelectorAll(".lead-form");
 const cookieBanner = document.querySelector("#cookie-banner");
 
@@ -56,19 +58,39 @@ function chooseObject(value, scrollToForm = false) {
   if (scrollToForm) document.querySelector("#request")?.scrollIntoView({behavior:"smooth", block:"start"});
 }
 
+function chooseProblem(value) {
+  problemInputs.forEach(input => { input.value = value; });
+  problemButtons.forEach(button => button.classList.toggle("is-selected", button.dataset.pickProblem === value));
+  trackGoal("select_problem_prochistka", {problem: value});
+  document.querySelector("#request")?.scrollIntoView({behavior:"smooth", block:"start"});
+}
+
 objectButtons.forEach(button => button.addEventListener("click", () => chooseObject(button.dataset.objectOption || "Квартира")));
-document.querySelectorAll("[data-pick-object]").forEach(link => link.addEventListener("click", () => chooseObject(link.dataset.pickObject || "Квартира")));
+document.querySelectorAll("[data-pick-object]").forEach(link => link.addEventListener("click", event => {
+  event.preventDefault();
+  chooseObject(link.dataset.pickObject || "Квартира", true);
+  trackGoal("select_object_prochistka", {object: link.dataset.pickObject || "Квартира"});
+}));
+problemButtons.forEach(button => button.addEventListener("click", () => chooseProblem(button.dataset.pickProblem || "")));
 document.querySelectorAll('select[name="objectType"]').forEach(select => select.addEventListener("change", () => chooseObject(select.value)));
 document.querySelectorAll("[data-call]").forEach(link => link.addEventListener("click", () => trackGoal("click_phone_prochistka", {place: link.closest("header") ? "header" : "page"})));
+document.querySelectorAll("[data-telegram]").forEach(link => link.addEventListener("click", () => trackGoal("click_telegram_prochistka", {place: link.closest("footer") ? "footer" : "page"})));
 document.querySelectorAll('a[href="#request"]').forEach(link => link.addEventListener("click", () => trackGoal("open_form_prochistka", {place: link.closest("header") ? "header" : "page"})));
 
 document.querySelectorAll('input[type="tel"]').forEach(input => {
-  input.addEventListener("focus", () => { if (!input.value) input.value = "+7 "; });
   input.addEventListener("input", () => {
-    const digits = input.value.replace(/\D/g, "").replace(/^8/, "7").slice(0, 11);
-    const normalized = digits.startsWith("7") ? digits : "7" + digits;
-    const parts = [normalized.slice(0,1), normalized.slice(1,4), normalized.slice(4,7), normalized.slice(7,9), normalized.slice(9,11)];
-    input.value = "+" + parts[0] + (parts[1] ? " " + parts[1] : "") + (parts[2] ? " " + parts[2] : "") + (parts[3] ? "-" + parts[3] : "") + (parts[4] ? "-" + parts[4] : "");
+    let digits = input.value.replace(/\D/g, "");
+    if (digits.length > 10 && (digits.startsWith("7") || digits.startsWith("8"))) digits = digits.slice(1);
+    digits = digits.slice(0, 10);
+    const parts = [digits.slice(0,3), digits.slice(3,6), digits.slice(6,8), digits.slice(8,10)];
+    input.value = parts[0] + (parts[1] ? " " + parts[1] : "") + (parts[2] ? "-" + parts[2] : "") + (parts[3] ? "-" + parts[3] : "");
+  });
+});
+
+document.querySelectorAll(".faq details").forEach(item => {
+  item.addEventListener("toggle", () => {
+    if (!item.open) return;
+    document.querySelectorAll(".faq details").forEach(other => { if (other !== item) other.open = false; });
   });
 });
 
@@ -78,11 +100,13 @@ leadForms.forEach(form => {
     const button = form.querySelector('button[type="submit"]');
     const statusNode = form.querySelector(".form-status");
     const data = new FormData(form);
-    const phone = String(data.get("phone") || "").trim();
-    const digits = phone.replace(/\D/g, "");
+    const rawPhone = String(data.get("phone") || "").trim();
+    let digits = rawPhone.replace(/\D/g, "");
+    if (digits.length === 11 && (digits.startsWith("7") || digits.startsWith("8"))) digits = digits.slice(1);
+    const phone = `+7 ${rawPhone}`;
     statusNode.className = statusNode.classList.contains("wide-field") ? "form-status wide-field" : "form-status";
 
-    if (digits.length !== 11) {
+    if (digits.length !== 10) {
       statusNode.textContent = "Проверьте номер телефона.";
       statusNode.classList.add("visible", "error");
       return;
@@ -118,6 +142,7 @@ leadForms.forEach(form => {
       if (!response.ok) throw new Error("send_failed");
       form.reset();
       chooseObject("Квартира");
+      problemButtons.forEach(button => button.classList.remove("is-selected"));
       statusNode.textContent = "Заявка принята. Скоро мы позвоним вам.";
       statusNode.classList.add("visible", "success");
       button.textContent = "Заявка отправлена";
