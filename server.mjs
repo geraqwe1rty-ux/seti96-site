@@ -179,7 +179,11 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
       });
       const relayText = await result.text();
       const relay = (() => { try { return JSON.parse(relayText); } catch { return {}; } })();
-      const relayDetail = String(relay.error || relay.description || "").trim().slice(0, 160);
+      const relayMessage = String(relay.error || relay.description || "").trim().slice(0, 120);
+      const relayTelegramStatus = Number.isFinite(Number(relay.telegramStatus))
+        ? `Telegram ${Number(relay.telegramStatus)}`
+        : "";
+      const relayDetail = [relayMessage, relayTelegramStatus].filter(Boolean).join(", ");
       lead.telegram_status = result.ok && relay.ok
         ? "доставлено (шлюз)"
         : `ошибка шлюза ${result.status}${relayDetail ? `: ${relayDetail}` : ""}`;
