@@ -117,7 +117,7 @@ async function deliverPrimaryLeadDirectly(lead) {
   }
 }
 
-app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-diagnostics-v3"}));
+app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-diagnostics-v4"}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
