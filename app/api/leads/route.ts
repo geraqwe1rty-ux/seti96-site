@@ -24,7 +24,12 @@ type TelegramResult = {
   parameters?: {migrate_to_chat_id?: number | string};
 };
 
-const browserOrigins = new Set(["https://seti96.ru", "https://www.seti96.ru"]);
+const browserOrigins = new Set([
+  "https://seti96.ru",
+  "https://www.seti96.ru",
+  "https://prochistka.seti96.ru",
+]);
+const allowedClientTypes = new Set(["Частный дом", "УК / организация", "Квартира", "Организация"]);
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get("origin") || "";
@@ -46,6 +51,13 @@ async function runtime() {
 
 const value = (body: Record<string, unknown>, key: string, maxLength: number) =>
   String(body[key] || "").trim().slice(0, maxLength);
+
+function normalizePhone(input: string) {
+  const digits = input.replace(/\D/g, "");
+  if (digits.length === 10) return "+7" + digits;
+  if (digits.length === 11 && (digits[0] === "7" || digits[0] === "8")) return "+7" + digits.slice(1);
+  return null;
+}
 
 const clean = (input: string) => {
   const replacements: Record<string, string> = {"<": "&lt;", ">": "&gt;", "&": "&amp;"};
@@ -77,13 +89,13 @@ export async function POST(request: Request) {
 
   if (value(body, "website", 200)) return json(request, {ok: true});
 
-  const phone = value(body, "phone", 30);
+  const phone = normalizePhone(value(body, "phone", 40));
   const name = value(body, "name", 100) || "Не указано";
   const clientType = value(body, "clientType", 40);
   const page = value(body, "page", 200);
-  const message = value(body, "message", 1000);
+  const message = value(body, "message", 1000) || value(body, "problem", 1000);
 
-  if (!/^\+7\d{10}$/.test(phone) || !["Частный дом", "УК / организация"].includes(clientType)) {
+  if (!phone || !allowedClientTypes.has(clientType)) {
     return json(request, {error: "Проверьте номер телефона"}, 400);
   }
 
@@ -104,8 +116,10 @@ export async function POST(request: Request) {
       ["Телефон", phone],
       ["Дата и время", new Date(created).toLocaleString("ru-RU", {timeZone: "Asia/Yekaterinburg"})],
       ["Описание", message],
+      ["Услуга", value(body, "service", 200)],
+      ["Адрес", value(body, "address", 500)],
       ["Страница", page],
-      ["Место формы", value(body, "placement", 100)],
+      ["Место формы", value(body, "placement", 100) || value(body, "formPlace", 100)],
       ["Источник", value(body, "source", 300)],
       ["Referrer", value(body, "referrer", 500)],
       ["Первая страница", value(body, "landing", 500)],
