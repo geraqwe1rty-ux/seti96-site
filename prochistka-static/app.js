@@ -1,5 +1,6 @@
 const METRIKA_ID = window.PROCHISTKA_METRIKA_ID;
 const COOKIE_KEY = "seti96_prochistka_cookie_choice";
+const TELEGRAM_RELAY_URL = "https://seti96-engineering.german123312.chatgpt.site/api/leads";
 const selectedObjectInputs = document.querySelectorAll('[name="objectType"]');
 const objectButtons = document.querySelectorAll("[data-object-option]");
 const problemInputs = document.querySelectorAll('[name="problem"]');
@@ -118,28 +119,35 @@ leadForms.forEach(form => {
 
     try {
       const objectType = String(data.get("objectType") || "Квартира");
-      const response = await fetch("/api/leads", {
+      const payload = {
+        name: String(data.get("name") || "Не указано").trim() || "Не указано",
+        phone,
+        clientType: objectType,
+        service: "Прочистка канализации",
+        address: String(data.get("address") || "").trim(),
+        problem: String(data.get("problem") || "").trim(),
+        page: location.hostname + location.pathname,
+        formPlace: form.dataset.formPlace || "Форма расчёта",
+        consent: data.get("consent") === "on",
+        policyVersion: "2026-09-11",
+        source: utm.source,
+        campaign: utm.campaign,
+        utm_campaign: utm.campaign,
+        utm_content: utm.content,
+        utm_term: utm.term
+      };
+      const relayResponse = await fetch(TELEGRAM_RELAY_URL, {
         method: "POST",
         headers: {"content-type": "application/json"},
-        body: JSON.stringify({
-          name: String(data.get("name") || "Не указано").trim() || "Не указано",
-          phone,
-          clientType: objectType,
-          service: "Прочистка канализации",
-          address: String(data.get("address") || "").trim(),
-          problem: String(data.get("problem") || "").trim(),
-          page: location.hostname + location.pathname,
-          formPlace: form.dataset.formPlace || "Форма расчёта",
-          consent: data.get("consent") === "on",
-          policyVersion: "2026-09-11",
-          source: utm.source,
-          campaign: utm.campaign,
-          utm_campaign: utm.campaign,
-          utm_content: utm.content,
-          utm_term: utm.term
-        })
+        body: JSON.stringify(payload)
       });
-      if (!response.ok) throw new Error("send_failed");
+      if (!relayResponse.ok) throw new Error("send_failed");
+      await fetch("/api/leads", {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: JSON.stringify({...payload, clientRelayDelivered: true}),
+        keepalive: true
+      }).catch(() => undefined);
       form.reset();
       chooseObject("Квартира");
       problemButtons.forEach(button => button.classList.remove("is-selected"));
