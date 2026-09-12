@@ -148,7 +148,7 @@ async function deliverPrimaryLeadDirectly(lead) {
   }
 }
 
-app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-browser-relay-v7"}));
+app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-all-leads-v8"}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
@@ -157,7 +157,7 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   const phone = bodyValue(body, "phone", 40);
   const clientType = bodyValue(body, "clientType", 40);
   const isPrimaryLead = isPrimarySeti96Host(req);
-  const deliveredByClientRelay = isPrimaryLead && body.clientRelayDelivered === true;
+  const deliveredByClientRelay = body.clientRelayDelivered === true;
 
   if (isPrimaryLead && bodyValue(body, "website", 200)) return res.json({ok: true});
   if (isPrimaryLead && (!/^\+7\d{10}$/.test(phone) || !["Частный дом", "УК / организация"].includes(clientType))) {
@@ -234,7 +234,7 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
 
   if (isPrimaryLead && !lead.telegram_status.startsWith("доставлено")) {
     return res.status(502).json({
-      error: "Заявка сохранена, но уведомление не отправлено. Позвоните нам по номеру +7 993 106-04-23.",
+      error: "Не удалось отправить заявку. Обновите страницу и попробуйте ещё раз.",
       saved: true,
       delivery: lead.telegram_status,
     });
