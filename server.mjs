@@ -78,6 +78,41 @@ const bodyValue = (body, key, maxLength) => String(body[key] ?? "").trim().slice
 
 const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":"&lt;", ">":"&gt;", "&":"&amp;"})[char]);
 
+async function deliverPrimaryLeadDirectly(lead) {
+  const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+  const chatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+  if (!token || !chatId) return false;
+
+  const details = [
+    ["Тип клиента", lead.client_type],
+    ["Имя", lead.name],
+    ["Телефон", lead.phone],
+    ["Описание", lead.comment],
+    ["Страница", lead.page],
+    ["Место формы", lead.form_place],
+    ["Источник", lead.utm_source || lead.source],
+    ["Кампания", lead.utm_campaign],
+    ["Поисковый запрос", lead.utm_term],
+    ["yclid", lead.yclid],
+  ].filter(([, value]) => value);
+  const text = [
+    "<b>Новая заявка с seti96.ru</b>",
+    ...details.map(([label, value]) => `<b>${label}:</b> ${escapeHtml(value)}`),
+  ].join("\n").slice(0, 4000);
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({chat_id: chatId, text, parse_mode: "HTML"}),
+    });
+    return response.ok;
+  } catch (error) {
+    console.error("Direct Telegram delivery failed", escapeHtml(error?.message));
+    return false;
+  }
+}
+
 app.get("/health", (_req, res) => res.json({ok: true}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
@@ -125,17 +160,39 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
         redirect: "follow",
         body: JSON.stringify({
           ...body,
+          name: lead.name,
+          phone: lead.phone,
+          clientType: lead.client_type,
+          page: lead.page,
+          formPlace: lead.form_place,
+          problem: lead.comment,
+          comment: lead.comment,
           leadId: lead.id,
           adminUrl: `https://${req.hostname}/admin`,
           secret: process.env.LEAD_RELAY_SECRET.trim()
         })
       });
       const relay = await result.json().catch(() => ({}));
-      lead.telegram_status = result.ok && relay.ok ? "доставлено" : `ошибка шлюза ${result.status}`;
-    } catch { lead.telegram_status = "ошибка доставки"; }
-    await writeLeads(leads.slice(0, 2000));
+      lead.telegram_status = result.ok && relay.ok ? "доставлено (шлюз)" : `ошибка шлюза ${result.status}`;
+    } catch (error) {
+      console.error("Lead relay error", escapeHtml(error?.message));
+      lead.telegram_status = "ошибка доставки";
+    }
   }
-  return res.json({ok: true});
+
+  if (isPrimaryLead && !lead.telegram_status.startsWith("доставлено")) {
+    if (await deliverPrimaryLeadDirectly(lead)) lead.telegram_status = "доставлено (напрямую)";
+  }
+  await writeLeads(leads.slice(0, 2000));
+
+  if (isPrimaryLead && !lead.telegram_status.startsWith("доставлено")) {
+    return res.status(502).json({
+      error: "Заявка сохранена, но уведомление не отправлено. Позвоните нам по номеру +7 993 106-04-23.",
+      saved: true,
+      delivery: lead.telegram_status,
+    });
+  }
+  return res.json({ok: true, delivery: lead.telegram_status});
 });
 
 app.get("/", (req, res, next) => isElectroHost(req) ? res.sendFile(path.join(electroDir, "index.html")) : next());
