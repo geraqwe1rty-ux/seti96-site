@@ -10,7 +10,10 @@ export const metadata: Metadata = {
   },
   description:
     "Промывка систем отопления, котлов, теплообменников и ИТП в Екатеринбурге и до 50 км. Осмотр и расчёт стоимости до начала работ.",
-  icons: {icon: "/favicon.svg"},
+  icons: {
+    icon: [{url: "/favicon-seti96.svg", type: "image/svg+xml"}],
+    shortcut: "/favicon-seti96.svg",
+  },
   openGraph: {
     type: "website",
     locale: "ru_RU",

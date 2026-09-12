@@ -34,6 +34,7 @@ test("renders the conversion-first homepage and canonical metadata", async () =>
   assert.match(html, /Оставьте номер — уточним задачу и рассчитаем стоимость/);
   assert.match(html, /<input type="tel"/i);
   assert.match(html, /111900032/);
+  assert.match(html, /favicon-seti96\.svg/);
 });
 
 test("renders unique article content and metadata", async () => {
