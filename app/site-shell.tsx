@@ -9,6 +9,7 @@ const METRIKA_ID = 111900032;
 const PHONE = "+7 993 106-04-23";
 const PHONE_HREF = "tel:+79931060423";
 const EMAIL = "seti-96@yandex.ru";
+const TELEGRAM_RELAY_URL = "https://seti96-engineering.german123312.chatgpt.site/api/leads";
 
 type PageName = "home" | "dom" | "org" | "blog" | "contacts" | "article";
 type ClientType = "Частный дом" | "УК / организация";
@@ -92,15 +93,23 @@ function getAttribution() {
 }
 
 async function postLead(payload: Record<string, string>) {
-  const response = await fetch("/api/leads", {
+  const attributedPayload = {...payload, ...getAttribution()};
+  const relayResponse = await fetch(TELEGRAM_RELAY_URL, {
     method: "POST",
     headers: {"content-type": "application/json"},
-    body: JSON.stringify({...payload, ...getAttribution()}),
+    body: JSON.stringify(attributedPayload),
   });
-  if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as {error?: string} | null;
+  if (!relayResponse.ok) {
+    const data = (await relayResponse.json().catch(() => null)) as {error?: string} | null;
     throw new Error(data?.error || "Не удалось отправить заявку");
   }
+
+  await fetch("/api/leads", {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify({...attributedPayload, clientRelayDelivered: true}),
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 export default function SiteShell({
