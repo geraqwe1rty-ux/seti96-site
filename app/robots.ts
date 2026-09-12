@@ -1,1 +1,8 @@
-import type {MetadataRoute} from "next"; export default function robots():MetadataRoute.Robots{return {rules:{userAgent:"*",allow:"/",disallow:"/admin"},sitemap:"https://сети96.рф/sitemap.xml"}}
+import type {MetadataRoute} from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: {userAgent: "*", allow: "/", disallow: ["/admin", "/api/"]},
+    sitemap: "https://seti96.ru/sitemap.xml",
+  };
+}

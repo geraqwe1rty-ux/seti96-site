@@ -1,2 +1,55 @@
+import type {Metadata} from "next";
+import {notFound} from "next/navigation";
+import {articles, getArticle} from "../../articles";
 import SiteShell from "../../site-shell";
-export default function Article(){return <><article className="articlePage"><a href="/materialy">← Все материалы</a><p className="eyebrow ink">Технический разбор</p><h1>Как понять, нужна ли системе отопления промывка</h1><p className="intro">Снижение теплоотдачи может быть связано с отложениями, но похожие признаки возникают и при неисправности автоматики, насоса или неправильной балансировке.</p><h2>На что обратить внимание</h2><p>Неравномерный нагрев, шум, длительный выход на рабочую температуру и загрязнённый теплоноситель — повод проверить систему. По одному признаку нельзя точно определить причину.</p><h2>Что происходит на осмотре</h2><p>Специалист оценивает оборудование, материал контура, точки подключения и характер загрязнений. После этого выбирает технологию, концентрацию раствора и продолжительность циркуляции.</p><h2>Ограничения</h2><p>Промывка не устраняет механические повреждения и не заменяет ремонт неисправных узлов. После удаления плотных отложений может проявиться коррозионная негерметичность, существовавшая ранее.</p></article><SiteShell page="article"/></>}
+
+type ArticlePageProps = {
+  params: Promise<{slug: string}>;
+};
+
+export function generateStaticParams() {
+  return articles.map((article) => ({slug: article.slug}));
+}
+
+export async function generateMetadata({params}: ArticlePageProps): Promise<Metadata> {
+  const {slug} = await params;
+  const article = getArticle(slug);
+  if (!article) return {};
+  const path = "/materialy/" + article.slug;
+  return {
+    title: article.title,
+    description: article.description,
+    alternates: {canonical: path},
+    openGraph: {
+      type: "article",
+      title: article.title,
+      description: article.description,
+      url: path,
+    },
+  };
+}
+
+export default async function Article({params}: ArticlePageProps) {
+  const {slug} = await params;
+  const article = getArticle(slug);
+  if (!article) notFound();
+  const url = "https://seti96.ru/materialy/" + article.slug;
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: article.title,
+    description: article.description,
+    mainEntityOfPage: url,
+    author: {"@type": "Organization", name: "Сети96", url: "https://seti96.ru"},
+    publisher: {"@type": "Organization", name: "Сети96", url: "https://seti96.ru"},
+  };
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{__html: JSON.stringify(structuredData).replace(/</g, "\\u003c")}}
+      />
+      <SiteShell page="article" article={article} />
+    </>
+  );
+}
