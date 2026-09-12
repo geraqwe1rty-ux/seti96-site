@@ -2,6 +2,7 @@ import express from "express";
 import {createProxyMiddleware} from "http-proxy-middleware";
 import {spawn} from "node:child_process";
 import {mkdir, readFile, rename, writeFile} from "node:fs/promises";
+import https from "node:https";
 import path from "node:path";
 
 const port = Number(process.env.PORT || 3000);
@@ -78,6 +79,42 @@ const bodyValue = (body, key, maxLength) => String(body[key] ?? "").trim().slice
 
 const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":"&lt;", ">":"&gt;", "&":"&amp;"})[char]);
 
+function postTelegramOverIpv4(token, payload) {
+  return new Promise((resolve, reject) => {
+    const body = Buffer.from(JSON.stringify(payload));
+    const request = https.request({
+      protocol: "https:",
+      hostname: "api.telegram.org",
+      port: 443,
+      family: 4,
+      method: "POST",
+      path: `/bot${token}/sendMessage`,
+      headers: {
+        "content-type": "application/json",
+        "content-length": body.length,
+      },
+    }, response => {
+      response.setEncoding("utf8");
+      let responseText = "";
+      response.on("data", chunk => {
+        if (responseText.length < 65536) responseText += chunk;
+      });
+      response.on("end", () => {
+        let telegram = {};
+        try { telegram = JSON.parse(responseText); } catch {}
+        resolve({status: Number(response.statusCode || 0), telegram});
+      });
+    });
+    request.setTimeout(8000, () => {
+      const error = new Error("Telegram IPv4 timeout");
+      error.code = "ETIMEDOUT";
+      request.destroy(error);
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
+}
+
 async function deliverPrimaryLeadDirectly(lead) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
   const chatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
@@ -101,23 +138,17 @@ async function deliverPrimaryLeadDirectly(lead) {
   ].join("\n").slice(0, 4000);
 
   try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: {"content-type": "application/json"},
-      body: JSON.stringify({chat_id: chatId, text, parse_mode: "HTML"}),
-      signal: AbortSignal.timeout(8000),
-    });
-    const telegram = await response.json().catch(() => ({}));
-    return response.ok && telegram.ok
+    const {status, telegram} = await postTelegramOverIpv4(token, {chat_id: chatId, text, parse_mode: "HTML"});
+    return status >= 200 && status < 300 && telegram.ok
       ? {ok: true, status: "доставлено (напрямую)"}
-      : {ok: false, status: `Telegram ${response.status}${telegram.description ? `: ${String(telegram.description).slice(0, 160)}` : ""}`};
+      : {ok: false, status: `Telegram ${status}${telegram.description ? `: ${String(telegram.description).slice(0, 160)}` : ""}`};
   } catch (error) {
     console.error("Direct Telegram delivery failed", escapeHtml(error?.message));
-    return {ok: false, status: error?.name === "TimeoutError" ? "Telegram: тайм-аут" : "Telegram: ошибка соединения"};
+    return {ok: false, status: error?.code === "ETIMEDOUT" ? "Telegram IPv4: тайм-аут" : "Telegram IPv4: ошибка соединения"};
   }
 }
 
-app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-diagnostics-v4"}));
+app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-ipv4-v5"}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
