@@ -81,7 +81,7 @@ const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":
 async function deliverPrimaryLeadDirectly(lead) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
   const chatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
-  if (!token || !chatId) return false;
+  if (!token || !chatId) return {ok: false, status: "Telegram напрямую не настроен"};
 
   const details = [
     ["Тип клиента", lead.client_type],
@@ -107,14 +107,17 @@ async function deliverPrimaryLeadDirectly(lead) {
       body: JSON.stringify({chat_id: chatId, text, parse_mode: "HTML"}),
       signal: AbortSignal.timeout(8000),
     });
-    return response.ok;
+    const telegram = await response.json().catch(() => ({}));
+    return response.ok && telegram.ok
+      ? {ok: true, status: "доставлено (напрямую)"}
+      : {ok: false, status: `Telegram ${response.status}${telegram.description ? `: ${String(telegram.description).slice(0, 160)}` : ""}`};
   } catch (error) {
     console.error("Direct Telegram delivery failed", escapeHtml(error?.message));
-    return false;
+    return {ok: false, status: error?.name === "TimeoutError" ? "Telegram: тайм-аут" : "Telegram: ошибка соединения"};
   }
 }
 
-app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-failover-v2"}));
+app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-diagnostics-v3"}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
@@ -174,8 +177,12 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
           secret: process.env.LEAD_RELAY_SECRET.trim()
         })
       });
-      const relay = await result.json().catch(() => ({}));
-      lead.telegram_status = result.ok && relay.ok ? "доставлено (шлюз)" : `ошибка шлюза ${result.status}`;
+      const relayText = await result.text();
+      const relay = (() => { try { return JSON.parse(relayText); } catch { return {}; } })();
+      const relayDetail = String(relay.error || relay.description || "").trim().slice(0, 160);
+      lead.telegram_status = result.ok && relay.ok
+        ? "доставлено (шлюз)"
+        : `ошибка шлюза ${result.status}${relayDetail ? `: ${relayDetail}` : ""}`;
     } catch (error) {
       console.error("Lead relay error", escapeHtml(error?.message));
       lead.telegram_status = "ошибка доставки";
@@ -183,7 +190,9 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   }
 
   if (isPrimaryLead && !lead.telegram_status.startsWith("доставлено")) {
-    if (await deliverPrimaryLeadDirectly(lead)) lead.telegram_status = "доставлено (напрямую)";
+    const relayStatus = lead.telegram_status;
+    const direct = await deliverPrimaryLeadDirectly(lead);
+    lead.telegram_status = direct.ok ? direct.status : `${relayStatus}; ${direct.status}`;
   }
   await writeLeads(leads.slice(0, 2000));
 
