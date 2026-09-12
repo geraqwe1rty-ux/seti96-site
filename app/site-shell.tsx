@@ -833,6 +833,8 @@ function QuickLeadForm({
         website: String(form.get("website") || ""),
         page: window.location.pathname,
         placement,
+        consent: "true",
+        policyVersion: "2026-09-12",
       });
       metricGoal("lead_success", {page, placement, client_type: selectedClient});
       metricGoal(selectedClient === "Частный дом" ? "private_lead" : "organization_lead", {page, placement});
@@ -964,6 +966,8 @@ function LeadModal({
         website: String(form.get("website") || ""),
         page: window.location.pathname,
         placement,
+        consent: "true",
+        policyVersion: "2026-09-12",
       });
       metricGoal("lead_success", {page, placement, client_type: selectedClient});
       metricGoal(selectedClient === "Частный дом" ? "private_lead" : "organization_lead", {page, placement});

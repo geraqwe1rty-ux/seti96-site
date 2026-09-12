@@ -69,6 +69,13 @@ function isProchistkaHost(req) {
   return String(req.hostname || "").toLowerCase() === "prochistka.seti96.ru";
 }
 
+function isPrimarySeti96Host(req) {
+  const hostname = String(req.hostname || "").toLowerCase();
+  return ["seti96.ru", "www.seti96.ru", "localhost", "127.0.0.1"].includes(hostname);
+}
+
+const bodyValue = (body, key, maxLength) => String(body[key] ?? "").trim().slice(0, maxLength);
+
 const escapeHtml = value => String(value || "").replace(/[<>&]/g, char => ({"<":"&lt;", ">":"&gt;", "&":"&amp;"})[char]);
 
 app.get("/health", (_req, res) => res.json({ok: true}));
@@ -76,7 +83,16 @@ app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   const body = req.body || {};
-  if (!body.name || !body.phone || !body.clientType || body.name.length > 100 || body.phone.length > 40) {
+  const name = bodyValue(body, "name", 100);
+  const phone = bodyValue(body, "phone", 40);
+  const clientType = bodyValue(body, "clientType", 40);
+  const isPrimaryLead = isPrimarySeti96Host(req);
+
+  if (isPrimaryLead && bodyValue(body, "website", 200)) return res.json({ok: true});
+  if (isPrimaryLead && (!/^\+7\d{10}$/.test(phone) || !["Частный дом", "УК / организация"].includes(clientType))) {
+    return res.status(400).json({error: "Проверьте номер телефона"});
+  }
+  if (!isPrimaryLead && (!name || !phone || !clientType)) {
     return res.status(400).json({error: "Проверьте данные"});
   }
   if (body.service === "Прочистка канализации" && body.consent !== true) {
@@ -85,13 +101,18 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   const leads = await readLeads();
   const created = new Date().toISOString();
   const lead = {
-    id: (leads[0]?.id || 0) + 1, created_at: created, name: body.name,
-    phone: body.phone, client_type: body.clientType, page: body.page || "",
-    service: body.service || "", address: body.address || "",
-    comment: body.problem || body.comment || "", form_place: body.formPlace || "",
+    id: (leads[0]?.id || 0) + 1, created_at: created, name: name || "Не указано",
+    phone, client_type: clientType, page: bodyValue(body, "page", 500),
+    service: bodyValue(body, "service", 200), address: bodyValue(body, "address", 500),
+    comment: bodyValue(body, "message", 1000) || bodyValue(body, "problem", 1000) || bodyValue(body, "comment", 1000),
+    form_place: bodyValue(body, "placement", 100) || bodyValue(body, "formPlace", 100),
     consent_at: body.consent ? created : "", policy_version: body.policyVersion || "",
-    source: body.source || "", utm_campaign: body.utm_campaign || body.campaign || "",
-    utm_content: body.utm_content || "", utm_term: body.utm_term || "",
+    source: bodyValue(body, "source", 300),
+    referrer: bodyValue(body, "referrer", 500), landing: bodyValue(body, "landing", 500),
+    utm_source: bodyValue(body, "utm_source", 200), utm_medium: bodyValue(body, "utm_medium", 200),
+    utm_campaign: bodyValue(body, "utm_campaign", 200) || bodyValue(body, "campaign", 200),
+    utm_content: bodyValue(body, "utm_content", 200), utm_term: bodyValue(body, "utm_term", 300),
+    yclid: bodyValue(body, "yclid", 200), gclid: bodyValue(body, "gclid", 200),
     status: "новая", telegram_status: "не настроен"
   };
   leads.unshift(lead);
