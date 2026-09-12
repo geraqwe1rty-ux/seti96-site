@@ -15,9 +15,6 @@ const santehnikaDir = path.resolve("santehnika-static");
 const gromkayaSvyazDir = path.resolve("gromkaya-svyaz-static");
 const avariyaDir = path.resolve("avariya-static");
 const prochistkaDir = path.resolve("prochistka-static");
-const primaryLeadBackupUrl = String(
-  process.env.PRIMARY_LEAD_BACKUP_URL || "https://seti96-engineering.german123312.chatgpt.site/api/leads",
-).trim();
 const app = express();
 
 await mkdir(dataDir, {recursive: true});
@@ -118,41 +115,6 @@ function postTelegramOverIpv4(token, payload) {
   });
 }
 
-async function deliverPrimaryLeadViaBackup(lead) {
-  try {
-    const response = await fetch(primaryLeadBackupUrl, {
-      method: "POST",
-      headers: {"content-type": "application/json"},
-      signal: AbortSignal.timeout(12000),
-      body: JSON.stringify({
-        name: lead.name,
-        phone: lead.phone,
-        clientType: lead.client_type,
-        page: lead.page,
-        placement: lead.form_place,
-        message: lead.comment,
-        source: lead.source,
-        referrer: lead.referrer,
-        landing: lead.landing,
-        utm_source: lead.utm_source,
-        utm_medium: lead.utm_medium,
-        utm_campaign: lead.utm_campaign,
-        utm_content: lead.utm_content,
-        utm_term: lead.utm_term,
-        yclid: lead.yclid,
-        gclid: lead.gclid,
-      }),
-    });
-    const relay = await response.json().catch(() => ({}));
-    return response.ok && relay.ok
-      ? {ok: true, status: "доставлено (резервный шлюз)"}
-      : {ok: false, status: `резервный шлюз ${response.status}${relay.error ? `: ${String(relay.error).slice(0, 160)}` : ""}`};
-  } catch (error) {
-    console.error("Backup lead relay failed", escapeHtml(error?.message));
-    return {ok: false, status: error?.name === "TimeoutError" ? "резервный шлюз: тайм-аут" : "резервный шлюз: ошибка соединения"};
-  }
-}
-
 async function deliverPrimaryLeadDirectly(lead) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
   const chatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
@@ -186,7 +148,7 @@ async function deliverPrimaryLeadDirectly(lead) {
   }
 }
 
-app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-backup-relay-v6"}));
+app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-browser-relay-v7"}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
@@ -195,6 +157,7 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   const phone = bodyValue(body, "phone", 40);
   const clientType = bodyValue(body, "clientType", 40);
   const isPrimaryLead = isPrimarySeti96Host(req);
+  const deliveredByClientRelay = isPrimaryLead && body.clientRelayDelivered === true;
 
   if (isPrimaryLead && bodyValue(body, "website", 200)) return res.json({ok: true});
   if (isPrimaryLead && (!/^\+7\d{10}$/.test(phone) || !["Частный дом", "УК / организация"].includes(clientType))) {
@@ -221,15 +184,10 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
     utm_campaign: bodyValue(body, "utm_campaign", 200) || bodyValue(body, "campaign", 200),
     utm_content: bodyValue(body, "utm_content", 200), utm_term: bodyValue(body, "utm_term", 300),
     yclid: bodyValue(body, "yclid", 200), gclid: bodyValue(body, "gclid", 200),
-    status: "новая", telegram_status: "не настроен"
+    status: "новая", telegram_status: deliveredByClientRelay ? "доставлено (браузерный шлюз)" : "не настроен"
   };
   leads.unshift(lead);
   await writeLeads(leads.slice(0, 2000));
-
-  if (isPrimaryLead) {
-    const backup = await deliverPrimaryLeadViaBackup(lead);
-    lead.telegram_status = backup.status;
-  }
 
   if (!lead.telegram_status.startsWith("доставлено") && process.env.LEAD_RELAY_URL && process.env.LEAD_RELAY_SECRET) {
     try {
