@@ -18,6 +18,25 @@ type RuntimeEnv = {
   TELEGRAM_CHAT_ID?: string;
 };
 
+type TelegramResult = {
+  ok?: boolean;
+  description?: string;
+  parameters?: {migrate_to_chat_id?: number | string};
+};
+
+const browserOrigins = new Set(["https://seti96.ru", "https://www.seti96.ru"]);
+
+function corsHeaders(request: Request) {
+  const origin = request.headers.get("origin") || "";
+  return browserOrigins.has(origin)
+    ? {"access-control-allow-origin": origin, vary: "Origin"}
+    : {};
+}
+
+function json(request: Request, data: unknown, status = 200) {
+  return Response.json(data, {status, headers: corsHeaders(request)});
+}
+
 async function runtime() {
   const {env} = await import("cloudflare:workers");
   const runtimeEnv = env as unknown as RuntimeEnv;
@@ -33,15 +52,30 @@ const clean = (input: string) => {
   return input.replace(/[<>&]/g, (character) => replacements[character]);
 };
 
+async function sendTelegram(token: string, chatId: string, text: string) {
+  const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify({chat_id: chatId, text, parse_mode: "HTML"}),
+  });
+  const result = (await response.json().catch(() => ({}))) as TelegramResult;
+  return {
+    ok: response.ok && result.ok === true,
+    status: response.status,
+    description: String(result.description || "").trim().slice(0, 180),
+    migrateToChatId: result.parameters?.migrate_to_chat_id,
+  };
+}
+
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
-    return Response.json({error: "Некорректные данные"}, {status: 400});
+    return json(request, {error: "Некорректные данные"}, 400);
   }
 
-  if (value(body, "website", 200)) return Response.json({ok: true});
+  if (value(body, "website", 200)) return json(request, {ok: true});
 
   const phone = value(body, "phone", 30);
   const name = value(body, "name", 100) || "Не указано";
@@ -50,7 +84,7 @@ export async function POST(request: Request) {
   const message = value(body, "message", 1000);
 
   if (!/^\+7\d{10}$/.test(phone) || !["Частный дом", "УК / организация"].includes(clientType)) {
-    return Response.json({error: "Проверьте номер телефона"}, {status: 400});
+    return json(request, {error: "Проверьте номер телефона"}, 400);
   }
 
   const runtimeEnv = await runtime();
@@ -61,7 +95,6 @@ export async function POST(request: Request) {
     .bind(created, name, phone, clientType, page, message)
     .run();
   const id = Number(saved.meta.last_row_id);
-  const origin = new URL(request.url).origin;
   let telegramStatus = "не настроен";
 
   if (runtimeEnv.TELEGRAM_BOT_TOKEN && runtimeEnv.TELEGRAM_CHAT_ID) {
@@ -91,27 +124,42 @@ export async function POST(request: Request) {
       .join("\n")
       .slice(0, 4000);
     try {
-      const telegramResponse = await fetch(
-        "https://api.telegram.org/bot" + runtimeEnv.TELEGRAM_BOT_TOKEN + "/sendMessage",
-        {
-          method: "POST",
-          headers: {"content-type": "application/json"},
-          body: JSON.stringify({
-            chat_id: runtimeEnv.TELEGRAM_CHAT_ID,
-            text: telegramText,
-            parse_mode: "HTML",
-            reply_markup: {inline_keyboard: [[{text: "Открыть заявку", url: origin + "/admin"}]]},
-          }),
-        },
-      );
-      telegramStatus = telegramResponse.ok ? "доставлено" : "ошибка " + telegramResponse.status;
+      let telegram = await sendTelegram(runtimeEnv.TELEGRAM_BOT_TOKEN, runtimeEnv.TELEGRAM_CHAT_ID, telegramText);
+      if (!telegram.ok && telegram.migrateToChatId) {
+        const migratedChatId = String(telegram.migrateToChatId);
+        telegram = await sendTelegram(runtimeEnv.TELEGRAM_BOT_TOKEN, migratedChatId, telegramText);
+        telegramStatus = telegram.ok
+          ? `доставлено (чат ${migratedChatId})`
+          : `ошибка ${telegram.status}: ${telegram.description || "Telegram отклонил сообщение"}`;
+      } else {
+        telegramStatus = telegram.ok
+          ? "доставлено"
+          : `ошибка ${telegram.status}: ${telegram.description || "Telegram отклонил сообщение"}`;
+      }
     } catch {
       telegramStatus = "ошибка доставки";
     }
   }
 
   await runtimeEnv.DB.prepare("UPDATE leads SET telegram_status=? WHERE id=?").bind(telegramStatus, id).run();
-  return Response.json({ok: true});
+  if (!telegramStatus.startsWith("доставлено")) {
+    return json(request, {ok: false, error: telegramStatus}, 502);
+  }
+  return json(request, {ok: true, delivery: telegramStatus});
+}
+
+export async function OPTIONS(request: Request) {
+  const headers = corsHeaders(request);
+  if (!("access-control-allow-origin" in headers)) return new Response(null, {status: 403});
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...headers,
+      "access-control-allow-methods": "POST, OPTIONS",
+      "access-control-allow-headers": "content-type",
+      "access-control-max-age": "86400",
+    },
+  });
 }
 
 export async function GET() {
