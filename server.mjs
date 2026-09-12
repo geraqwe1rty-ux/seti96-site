@@ -105,6 +105,7 @@ async function deliverPrimaryLeadDirectly(lead) {
       method: "POST",
       headers: {"content-type": "application/json"},
       body: JSON.stringify({chat_id: chatId, text, parse_mode: "HTML"}),
+      signal: AbortSignal.timeout(8000),
     });
     return response.ok;
   } catch (error) {
@@ -158,6 +159,7 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
       const result = await fetch(process.env.LEAD_RELAY_URL.trim(), {
         method: "POST", headers: {"content-type":"application/json"},
         redirect: "follow",
+        signal: AbortSignal.timeout(8000),
         body: JSON.stringify({
           ...body,
           name: lead.name,
