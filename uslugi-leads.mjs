@@ -15,7 +15,9 @@ export async function readUslugiLeads(dataDir){
   try{const text=await readFile(path.join(dataDir,'uslugi-leads.ndjson'),'utf8');const latest=new Map();for(const line of text.split('\n'))if(line.trim()){try{const lead=JSON.parse(line);latest.set(lead.id,lead)}catch{}}return Array.from(latest.values()).sort((a,b)=>b.created_at.localeCompare(a.created_at))}
   catch(e){if(e.code==='ENOENT')return [];throw e}
 }
-export function createUslugiLeadHandler({dataDir,deliverDirect,env=process.env}){
+// Company relay already used by the heating and sewer sites; owner approved uslugi forwarding.
+const companyRelay='https://seti96-engineering.german123312.chatgpt.site/api/leads';
+export function createUslugiLeadHandler({dataDir,deliverDirect,env=process.env,fetchImpl=fetch,publicRelayUrl=companyRelay}){
   let writing=Promise.resolve();const attempts=new Map();
   const save=lead=>{const operation=writing.then(()=>appendFile(path.join(dataDir,'uslugi-leads.ndjson'),JSON.stringify(lead)+'\n','utf8'));writing=operation.catch(()=>{});return operation};
   return async function(req,res,next){
@@ -27,8 +29,10 @@ export function createUslugiLeadHandler({dataDir,deliverDirect,env=process.env})
       await save(lead);
       let delivered=false;
       if(env.TELEGRAM_BOT_TOKEN&&env.TELEGRAM_CHAT_ID){const result=await deliverDirect(lead);delivered=result.ok;lead.telegram_status=result.ok?'доставлено (напрямую)':'не удалось доставить напрямую'}
-      if(!delivered&&env.LEAD_RELAY_URL&&env.LEAD_RELAY_SECRET){
-        try{const response=await fetch(env.LEAD_RELAY_URL.trim(),{method:'POST',headers:{'content-type':'application/json'},signal:AbortSignal.timeout(8000),body:JSON.stringify({...lead,clientType:lead.client_type,problem:lead.comment,message:lead.comment,formPlace:lead.form_place,leadId:lead.id,adminUrl:'https://uslugi.seti96.ru/admin',secret:env.LEAD_RELAY_SECRET.trim()})});const result=await response.json();delivered=response.ok&&result.ok===true;lead.telegram_status=delivered?'доставлено (шлюз)':'ошибка доставки через шлюз'}catch{lead.telegram_status='ошибка доставки через шлюз'}
+      const privateRelay=env.LEAD_RELAY_URL?.trim()&&env.LEAD_RELAY_SECRET?.trim();
+      const relayUrl=privateRelay?env.LEAD_RELAY_URL.trim():publicRelayUrl;
+      if(!delivered&&relayUrl){
+        try{const response=await fetchImpl(relayUrl,{method:'POST',headers:{'content-type':'application/json'},signal:AbortSignal.timeout(10000),body:JSON.stringify({...lead,clientType:lead.client_type,problem:lead.comment,message:lead.comment,formPlace:lead.form_place,leadId:lead.id,consent:true,policyVersion:lead.policy_version,adminUrl:'https://uslugi.seti96.ru/admin',...(privateRelay?{secret:env.LEAD_RELAY_SECRET.trim()}:{})})});const result=await response.json();delivered=response.ok&&result.ok===true;lead.telegram_status=delivered?'доставлено (шлюз)':'ошибка доставки через шлюз'}catch{lead.telegram_status='ошибка доставки через шлюз'}
       }
       if(!delivered&&lead.telegram_status==='ожидает доставки')lead.telegram_status='доставка не настроена';
       await save(lead);
