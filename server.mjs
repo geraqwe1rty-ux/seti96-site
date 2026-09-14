@@ -4,6 +4,7 @@ import {spawn} from "node:child_process";
 import {mkdir, readFile, rename, writeFile} from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
+import {isUslugiHost, createUslugiLeadHandler, readUslugiLeads} from "./uslugi-leads.mjs";
 
 const port = Number(process.env.PORT || 3000);
 const appPort = Number(process.env.APP_INTERNAL_PORT || 3001);
@@ -15,6 +16,7 @@ const santehnikaDir = path.resolve("santehnika-static");
 const gromkayaSvyazDir = path.resolve("gromkaya-svyaz-static");
 const avariyaDir = path.resolve("avariya-static");
 const prochistkaDir = path.resolve("prochistka-static");
+const uslugiDir = path.resolve("uslugi-static");
 const app = express();
 
 await mkdir(dataDir, {recursive: true});
@@ -124,6 +126,7 @@ async function deliverPrimaryLeadDirectly(lead) {
     ["Тип клиента", lead.client_type],
     ["Имя", lead.name],
     ["Телефон", lead.phone],
+    ["Адрес / район", lead.address],
     ["Описание", lead.comment],
     ["Страница", lead.page],
     ["Место формы", lead.form_place],
@@ -133,7 +136,8 @@ async function deliverPrimaryLeadDirectly(lead) {
     ["yclid", lead.yclid],
   ].filter(([, value]) => value);
   const text = [
-    "<b>Новая заявка с seti96.ru</b>",
+    `<b>Новая заявка с ${lead.source === "uslugi.seti96.ru" ? "uslugi.seti96.ru" : "seti96.ru"}</b>`,
+    ...(lead.service ? [`<b>Услуга:</b> ${escapeHtml(lead.service)}`] : []),
     ...details.map(([label, value]) => `<b>${label}:</b> ${escapeHtml(value)}`),
   ].join("\n").slice(0, 4000);
 
@@ -150,7 +154,8 @@ async function deliverPrimaryLeadDirectly(lead) {
 
 app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-all-leads-v8"}));
 app.use("/admin", protect);
-app.get("/api/leads", protect, async (_req, res) => res.json(await readLeads()));
+app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
+app.post("/api/leads", express.json({limit: "32kb"}), createUslugiLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   const body = req.body || {};
   const name = bodyValue(body, "name", 100);
@@ -263,6 +268,12 @@ app.get("/policy", (req, res, next) => isProchistkaHost(req) ? res.sendFile(path
 app.get("/consent", (req, res, next) => isProchistkaHost(req) ? res.sendFile(path.join(prochistkaDir, "consent.html")) : next());
 app.get("/cookies", (req, res, next) => isProchistkaHost(req) ? res.sendFile(path.join(prochistkaDir, "cookies.html")) : next());
 app.use((req, res, next) => isProchistkaHost(req) ? express.static(prochistkaDir, {index: false})(req, res,next) : next());
+
+app.use((req, res, next) => {
+  if (!isUslugiHost(req) || req.path.startsWith("/admin")) return next();
+  if (req.method !== "GET" && req.method !== "HEAD") return res.status(405).json({error: "Метод не поддерживается"});
+  return express.static(uslugiDir)(req, res, () => res.status(404).sendFile(path.join(uslugiDir,"404","index.html")));
+});
 
 const child = spawn(process.execPath, ["node_modules/vinext/dist/cli.js", "start", "--port", String(appPort), "--hostname", "127.0.0.1"], {
   stdio: "inherit", env: {...process.env, PORT: String(appPort)}
