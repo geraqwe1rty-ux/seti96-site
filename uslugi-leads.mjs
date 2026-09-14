@@ -32,7 +32,7 @@ export function createUslugiLeadHandler({dataDir,deliverDirect,env=process.env,f
       const privateRelay=env.LEAD_RELAY_URL?.trim()&&env.LEAD_RELAY_SECRET?.trim();
       const relayUrl=privateRelay?env.LEAD_RELAY_URL.trim():publicRelayUrl;
       if(!delivered&&relayUrl){
-        try{const response=await fetchImpl(relayUrl,{method:'POST',headers:{'content-type':'application/json'},signal:AbortSignal.timeout(10000),body:JSON.stringify({...lead,clientType:lead.client_type,problem:lead.comment,message:lead.comment,formPlace:lead.form_place,leadId:lead.id,consent:true,policyVersion:lead.policy_version,adminUrl:'https://uslugi.seti96.ru/admin',...(privateRelay?{secret:env.LEAD_RELAY_SECRET.trim()}:{})})});const result=await response.json();delivered=response.ok&&result.ok===true;lead.telegram_status=delivered?'доставлено (шлюз)':'ошибка доставки через шлюз'}catch{lead.telegram_status='ошибка доставки через шлюз'}
+        try{const response=await fetchImpl(relayUrl,{method:'POST',headers:{'content-type':'application/json','user-agent':'SETI96/1.0 (+https://uslugi.seti96.ru)'},signal:AbortSignal.timeout(10000),body:JSON.stringify({...lead,clientType:lead.client_type,problem:lead.comment,message:lead.comment,formPlace:lead.form_place,leadId:lead.id,consent:true,policyVersion:lead.policy_version,adminUrl:'https://uslugi.seti96.ru/admin',...(privateRelay?{secret:env.LEAD_RELAY_SECRET.trim()}:{})})});const result=await response.json();delivered=response.ok&&result.ok===true;lead.telegram_status=delivered?'доставлено (шлюз)':'ошибка доставки через шлюз'}catch{lead.telegram_status='ошибка доставки через шлюз'}
       }
       if(!delivered&&lead.telegram_status==='ожидает доставки')lead.telegram_status='доставка не настроена';
       await save(lead);
