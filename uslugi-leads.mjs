@@ -27,6 +27,9 @@ export function createUslugiLeadHandler({dataDir,deliverDirect,env=process.env,f
     const recent=attempts.get(lead.phone)||{time:now,count:0};if(recent.count>=5)return res.status(429).json({error:'Слишком много обращений с этого номера. Позвоните нам.'});recent.count++;attempts.set(lead.phone,recent);
     try{
       await save(lead);
+      // The browser has already used the existing company's delivery endpoint.
+      // Keep the local record explicitly unverified rather than trusting a client flag.
+      if(req.body.browserRelayReceipt===true){lead.telegram_status='подтверждено браузером, сервером не проверено';await save(lead);return res.status(202).json({saved:true})}
       let delivered=false;
       if(env.TELEGRAM_BOT_TOKEN&&env.TELEGRAM_CHAT_ID){const result=await deliverDirect(lead);delivered=result.ok;lead.telegram_status=result.ok?'доставлено (напрямую)':'не удалось доставить напрямую'}
       const privateRelay=!publicRelayUrl&&env.LEAD_RELAY_URL?.trim()&&env.LEAD_RELAY_SECRET?.trim();

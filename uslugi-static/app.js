@@ -46,9 +46,25 @@ if(leadForm){let started=false;leadForm.addEventListener('input',()=>{if(!starte
  const selected=leadForm.elements.service.selectedOptions[0];const payload={...data,name:data.name||'Не указано',phone:'+'+digits,service:selected.value?selected.textContent:'Нужна консультация',consent:true,policyVersion:'2026-09-14-uslugi',page:location.origin+location.pathname,source:'uslugi.seti96.ru',placement:'request-page',referrer:document.referrer};
  for(const k of ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','yclid'])payload[k]=query.get(k)||sessionStorageValue(k);
  button.disabled=true;button.textContent='Отправляем…';
- try{const res=await fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(25000)});const result=await res.json();if(!res.ok||result.ok!==true)throw Error(result.error||'Не удалось подтвердить отправку');leadForm.hidden=true;const done=document.querySelector('#lead-success');done.hidden=false;done.focus();goal('lead_sent',{service:payload.service});leadForm.reset()}
+ try{await deliverThroughCompanyBrowser(payload);fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,browserRelayReceipt:true}),keepalive:true}).catch(()=>{});leadForm.hidden=true;const done=document.querySelector('#lead-success');done.hidden=false;done.focus();goal('lead_sent',{service:payload.service});leadForm.reset()}
  catch(error){status.textContent=(error.name==='TimeoutError'?'Не удалось получить подтверждение отправки. ':String(error.message)+'. ')+'Позвоните +7 993 106-04-23 — проверим обращение.'}
  finally{button.disabled=false;button.textContent='Получить предварительный расчёт'}
 })}
 function sessionStorageValue(k){try{return sessionStorage.getItem('seti96-'+k)||''}catch{return ''}}
 for(const k of ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','yclid'])if(query.has(k)){try{sessionStorage.setItem('seti96-'+k,query.get(k))}catch{}}
+
+function deliverThroughCompanyBrowser(payload){
+ return new Promise((resolve,reject)=>{
+  const origin='https://prochistka.seti96.ru',frame=document.createElement('iframe'),id=crypto.randomUUID();
+  frame.hidden=true;frame.title='Доставка заявки';frame.src=origin+'/uslugi-relay.html';
+  let started=false;
+  const cleanup=()=>{clearTimeout(timer);window.removeEventListener('message',receive);frame.remove()};
+  const receive=event=>{
+   if(event.origin!==origin||event.source!==frame.contentWindow)return;
+   if(event.data?.type==='uslugi-relay-ready'&&!started){started=true;frame.contentWindow.postMessage({type:'uslugi-lead',id,payload},origin)}
+   if(event.data?.type==='uslugi-lead-result'&&event.data.id===id){cleanup();event.data.ok===true?resolve():reject(Error('Не удалось подтвердить доставку заявки'))}
+  };
+  const timer=setTimeout(()=>{cleanup();reject(Error('Не удалось получить подтверждение доставки'))},25000);
+  window.addEventListener('message',receive);document.body.appendChild(frame);
+ });
+}

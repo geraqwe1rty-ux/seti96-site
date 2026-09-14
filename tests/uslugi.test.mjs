@@ -14,5 +14,20 @@ test('calculator applies service minimum, zone minimum and heavy transport',asyn
 
 async function cleanup(dir){const resolved=path.resolve(dir);assert.equal(path.dirname(resolved),path.resolve(tmpdir()));assert.ok(path.basename(resolved).startsWith('seti96-lead-test-'));await rm(resolved,{recursive:true,force:true})}
 
+test('browser relay accepts only the uslugi parent and confirmed gateway success',async()=>{
+ const html=await readFile(new URL('../prochistka-static/uslugi-relay.html',import.meta.url),'utf8');
+ const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];let listener,calls=0,ok=true;const messages=[];
+ const parent={postMessage:(message,origin)=>messages.push({message,origin})};
+ vm.runInNewContext(script,{window:{addEventListener:(_,fn)=>listener=fn},parent,AbortSignal,fetch:async()=>{calls++;return{ok:true,json:async()=>({ok})}}});
+ const event={origin:'https://uslugi.seti96.ru',source:parent,data:{type:'uslugi-lead',id:'test',payload:input}};
+ await listener({...event,origin:'https://untrusted.invalid'});await listener({...event,source:{}});assert.equal(calls,0);
+ await listener(event);assert.equal(calls,1);assert.equal(messages.at(-1).message.ok,true);assert.equal(messages.at(-1).origin,event.origin);
+ ok=false;await listener(event);assert.equal(messages.at(-1).message.ok,false);
+});
+test('local browser receipt cannot become server-confirmed delivery or resend a lead',async()=>{
+ const dir=await mkdtemp(path.join(tmpdir(),'seti96-lead-test-'));
+ try{const handler=createUslugiLeadHandler({dataDir:dir,env:{},deliverDirect:async()=>{throw Error('duplicate')},fetchImpl:async()=>{throw Error('duplicate')}});const res=response();await handler({hostname:'uslugi.seti96.ru',body:{...input,browserRelayReceipt:true}},res,()=>{});assert.equal(res.code,202);assert.equal(res.data.saved,true);assert.equal(res.data.ok,undefined);assert.match((await readUslugiLeads(dir))[0].telegram_status,/сервером не проверено/)}finally{await cleanup(dir)}
+});
+
 test('existing company relay works when Timeweb has no Telegram secrets',async()=>{const dir=await mkdtemp(path.join(tmpdir(),'seti96-lead-test-'));try{let request;const handler=createUslugiLeadHandler({dataDir:dir,env:{LEAD_RELAY_URL:'https://old-relay.invalid',LEAD_RELAY_SECRET:'test-only'},deliverDirect:async()=>{throw Error('must not call direct')},fetchImpl:async(url,options)=>{request={url,body:JSON.parse(options.body)};assert.equal(options.headers['user-agent'],'SETI96/1.0 (+https://uslugi.seti96.ru)');return{ok:true,json:async()=>({ok:true,delivery:'доставлено'})}}});const res=response();await handler({hostname:'uslugi.seti96.ru',body:{...input,address:'Тестовый район'}},res,()=>{});assert.equal(res.data.ok,true);assert.equal(request.url,'https://seti96-engineering.german123312.chatgpt.site/api/leads');assert.equal(request.body.service,input.service);assert.equal(request.body.message,input.message);assert.equal(request.body.address,'Тестовый район');assert.equal(request.body.consent,true);assert.equal(request.body.secret,undefined);assert.equal((await readUslugiLeads(dir))[0].telegram_status,'доставлено (шлюз)')}finally{await cleanup(dir)}});
 test('relay rejection does not turn into a successful request',async()=>{const dir=await mkdtemp(path.join(tmpdir(),'seti96-lead-test-'));try{const handler=createUslugiLeadHandler({dataDir:dir,env:{},deliverDirect:async()=>({ok:false}),fetchImpl:async()=>({ok:true,json:async()=>({ok:false})})});const res=response();await handler({hostname:'uslugi.seti96.ru',body:input},res,()=>{});assert.equal(res.code,502);assert.equal(res.data.saved,true)}finally{await cleanup(dir)}});
