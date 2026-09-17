@@ -14,6 +14,27 @@ test('calculator applies service minimum, zone minimum and heavy transport',asyn
 
 async function cleanup(dir){const resolved=path.resolve(dir);assert.equal(path.dirname(resolved),path.resolve(tmpdir()));assert.ok(path.basename(resolved).startsWith('seti96-lead-test-'));await rm(resolved,{recursive:true,force:true})}
 
+test('archive precedes delivery and receipt updates the same record without resending',async()=>{
+ const dir=await mkdtemp(path.join(tmpdir(),'seti96-lead-test-'));
+ try{
+  let sends=0;const handler=createUslugiLeadHandler({dataDir:dir,env:{},fetchImpl:async()=>{sends++;throw Error('must not send')}});
+  const archived=response();await handler({hostname:'uslugi.seti96.ru',body:{...input,archiveOnly:true,utm_campaign:'test',yclid:'test-click'}},archived,()=>{});
+  assert.equal(archived.code,202);assert.equal(archived.data.saved,true);assert.ok(archived.data.id);assert.equal(sends,0);
+  let rows=await readUslugiLeads(dir);assert.equal(rows.length,1);assert.equal(rows[0].telegram_status,'ожидает доставки');assert.equal(rows[0].yclid,'test-click');
+  const wrong=response();await handler({hostname:'uslugi.seti96.ru',body:{...input,phone:'+79990000001',browserRelayReceipt:true,receiptId:archived.data.id}},wrong,()=>{});assert.equal(wrong.code,404);
+  const receipt=response();await handler({hostname:'uslugi.seti96.ru',body:{...input,browserRelayReceipt:true,receiptId:archived.data.id}},receipt,()=>{});
+  rows=await readUslugiLeads(dir);assert.equal(rows.length,1);assert.equal(rows[0].id,archived.data.id);assert.match(rows[0].telegram_status,/сервером не проверено/);assert.equal(sends,0);
+ }finally{await cleanup(dir)}
+});
+
+test('client requires a server record id before it can proceed to delivery',async()=>{
+ const source=await readFile(new URL('../uslugi-static/app.js',import.meta.url),'utf8');let reply={ok:true,json:async()=>({saved:true,id:'test-id'})};
+ const context=vm.createContext({document:{querySelector:()=>null,querySelectorAll:()=>[],addEventListener:()=>{}},location:{search:''},URLSearchParams,Intl,localStorage:{getItem:()=>null},window:{},AbortSignal,fetch:async(_,options)=>{assert.equal(JSON.parse(options.body).archiveOnly,true);return reply}});
+ vm.runInContext(source,context);assert.equal(await context.archiveLead(input),'test-id');
+ reply={ok:true,json:async()=>({ok:true})};await assert.rejects(context.archiveLead(input));
+ reply={ok:false,json:async()=>({saved:true,id:'test-id'})};await assert.rejects(context.archiveLead(input));
+});
+
 test('browser relay accepts only the uslugi parent and confirmed gateway success',async()=>{
  const html=await readFile(new URL('../prochistka-static/uslugi-relay.html',import.meta.url),'utf8');
  const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];let listener,calls=0,ok=true;const messages=[];

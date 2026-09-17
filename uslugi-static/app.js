@@ -46,11 +46,18 @@ if(leadForm){let started=false;leadForm.addEventListener('input',()=>{if(!starte
  const selected=leadForm.elements.service.selectedOptions[0];const payload={...data,name:data.name||'Не указано',phone:'+'+digits,service:selected.value?selected.textContent:'Нужна консультация',consent:true,policyVersion:'2026-09-14-uslugi',page:location.origin+location.pathname,source:'uslugi.seti96.ru',placement:'request-page',referrer:document.referrer};
  for(const k of ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','yclid'])payload[k]=query.get(k)||sessionStorageValue(k);
  button.disabled=true;button.textContent='Отправляем…';
- try{await deliverThroughCompanyBrowser(payload);fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,browserRelayReceipt:true}),keepalive:true}).catch(()=>{});leadForm.hidden=true;const done=document.querySelector('#lead-success');done.hidden=false;done.focus();goal('lead_sent',{service:payload.service});leadForm.reset()}
- catch(error){status.textContent=(error.name==='TimeoutError'?'Не удалось получить подтверждение отправки. ':String(error.message)+'. ')+'Позвоните +7 993 106-04-23 — проверим обращение.'}
+ let savedId;
+ try{savedId=await archiveLead(payload);await deliverThroughCompanyBrowser({...payload,leadId:savedId});fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,browserRelayReceipt:true,receiptId:savedId}),keepalive:true}).catch(()=>{});leadForm.hidden=true;const done=document.querySelector('#lead-success');done.hidden=false;done.focus();goal('lead_sent',{service:payload.service});leadForm.reset()}
+ catch(error){status.textContent=(savedId?'Обращение сохранено, но доставка уведомления специалисту не подтверждена. Повторно отправлять форму не нужно. ':'Не удалось подтвердить сохранение обращения. ')+'Позвоните +7 993 106-04-23 — проверим обращение.'}
  finally{button.disabled=false;button.textContent='Получить предварительный расчёт'}
 })}
 function sessionStorageValue(k){try{return sessionStorage.getItem('seti96-'+k)||''}catch{return ''}}
+async function archiveLead(payload){
+ const response=await fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,archiveOnly:true}),signal:AbortSignal.timeout(15000),keepalive:true});
+ const result=await response.json();
+ if(!response.ok||result.saved!==true||typeof result.id!=='string'||!result.id)throw Error('Не удалось подтвердить сохранение обращения');
+ return result.id;
+}
 for(const k of ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','yclid'])if(query.has(k)){try{sessionStorage.setItem('seti96-'+k,query.get(k))}catch{}}
 
 function deliverThroughCompanyBrowser(payload){

@@ -23,10 +23,20 @@ export function createUslugiLeadHandler({dataDir,deliverDirect,env=process.env,f
   return async function(req,res,next){
     if(!isUslugiHost(req))return next();
     const parsed=validateUslugiLead(req.body||{});if(parsed.error)return res.status(parsed.status).json({error:parsed.error});
+    if(req.body.browserRelayReceipt===true&&req.body.receiptId){
+      try{
+        const existing=(await readUslugiLeads(dataDir)).find(row=>row.id===req.body.receiptId&&row.phone===parsed.lead.phone);
+        if(!existing)return res.status(404).json({error:'Сохранённое обращение не найдено'});
+        existing.telegram_status='подтверждено браузером, сервером не проверено';
+        await save(existing);return res.status(202).json({saved:true,id:existing.id});
+      }catch{return res.status(503).json({error:'Не удалось обновить статус обращения'})}
+    }
     const lead=parsed.lead;const now=Date.now();for(const [key,value] of attempts)if(now-value.time>600000)attempts.delete(key);
     const recent=attempts.get(lead.phone)||{time:now,count:0};if(recent.count>=5)return res.status(429).json({error:'Слишком много обращений с этого номера. Позвоните нам.'});recent.count++;attempts.set(lead.phone,recent);
     try{
       await save(lead);
+      // Persist before browser delivery. A failed/closed browser leaves an actionable record.
+      if(req.body.archiveOnly===true)return res.status(202).json({saved:true,id:lead.id});
       // The browser has already used the existing company's delivery endpoint.
       // Keep the local record explicitly unverified rather than trusting a client flag.
       if(req.body.browserRelayReceipt===true){lead.telegram_status='подтверждено браузером, сервером не проверено';await save(lead);return res.status(202).json({saved:true})}
