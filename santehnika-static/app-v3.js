@@ -57,17 +57,36 @@
     const values = Object.fromEntries(new FormData(form));
     const payload = {name: values.name.trim() || 'Не указано', phone: normalized, clientType: values.clientType, service: 'Сантехника', address: values.address.trim(), problem: [values.task, values.problem.trim()].filter(Boolean).join('\n'), consent: form.elements.consent.checked, policyVersion: 'santehnika-2026-09-23', website: values.website, formPlace: 'santehnika-main', page: 'https://santehnika.seti96.ru' + location.pathname, source: 'santehnika.seti96.ru', referrer: document.referrer, landing: location.href.slice(0, 500), ...Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_content','utm_term','yclid','gclid'].map(k => [k, params.get(k) || '']))};
     sending = true; submit.disabled = true; submit.textContent = 'Отправляем…';
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 25000);
+    let savedId;
     try {
-      const response = await fetch('/api/leads', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(payload), signal: controller.signal});
+      const response = await fetch('/api/leads', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({...payload, archiveOnly: true}), signal: AbortSignal.timeout(15000)});
       const result = await response.json().catch(() => ({}));
-      if (result.saved && !response.ok) { errorBox.textContent = 'Заявка сохранена, но уведомление специалисту пока не доставлено. Чтобы не ждать, позвоните: +7 993 106-04-23.'; errorBox.hidden = false; track('lead_saved_delivery_failed'); return; }
-      if (!response.ok || result.ok !== true) throw new Error('delivery');
+      if (!response.ok || result.saved !== true || !Number.isInteger(result.id)) throw new Error('archive');
+      savedId = result.id;
+      await deliverThroughCompanyBrowser({...payload, leadId: savedId});
+      fetch('/api/leads', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({...payload, browserRelayReceipt: true, receiptId: savedId}), keepalive: true}).catch(() => {});
       form.hidden = true; success.hidden = false; success.focus(); form.reset(); track('lead_sent');
     } catch (error) {
-      errorBox.textContent = error.name === 'AbortError' ? 'Не получили подтверждение отправки. Заявка могла сохраниться. Позвоните нам: +7 993 106-04-23.' : 'Не удалось отправить заявку. Попробуйте ещё раз или позвоните: +7 993 106-04-23.';
-      errorBox.hidden = false; track('lead_error');
-    } finally { clearTimeout(timer); sending = false; submit.disabled = false; submit.innerHTML = 'Получить расчёт <span aria-hidden="true">↗</span>'; }
+      errorBox.textContent = savedId ? 'Заявка сохранена, но доставка уведомления специалисту не подтверждена. Повторно отправлять форму не нужно. Позвоните: +7 993 106-04-23.' : 'Не удалось подтвердить сохранение заявки. Позвоните нам: +7 993 106-04-23.';
+      errorBox.hidden = false; track(savedId ? 'lead_saved_delivery_failed' : 'lead_error');
+    } finally { sending = false; submit.disabled = false; submit.innerHTML = 'Получить расчёт <span aria-hidden="true">↗</span>'; }
   });
+  function deliverThroughCompanyBrowser(payload) {
+    return new Promise((resolve, reject) => {
+      const origin = 'https://prochistka.seti96.ru';
+      const frame = document.createElement('iframe');
+      const id = crypto.randomUUID();
+      frame.hidden = true; frame.title = 'Доставка заявки'; frame.src = origin + '/santehnika-relay.html';
+      let started = false;
+      const cleanup = () => { clearTimeout(timer); window.removeEventListener('message', receive); frame.remove(); };
+      const receive = event => {
+        if (event.origin !== origin || event.source !== frame.contentWindow) return;
+        if (event.data?.type === 'santehnika-relay-ready' && !started) { started = true; frame.contentWindow.postMessage({type: 'santehnika-lead', id, payload}, origin); }
+        if (event.data?.type === 'santehnika-lead-result' && event.data.id === id) { cleanup(); event.data.ok === true ? resolve() : reject(new Error('delivery')); }
+      };
+      const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 25000);
+      window.addEventListener('message', receive); document.body.appendChild(frame);
+    });
+  }
   document.querySelector('#another-request').addEventListener('click', () => { success.hidden = true; form.hidden = false; phone.focus(); });
 })();

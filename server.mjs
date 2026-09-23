@@ -185,6 +185,13 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
     return res.status(400).json({error: "Необходимо согласие на обработку данных"});
   }
   const leads = await readLeads();
+  if (isPlumbingLead && body.browserRelayReceipt === true) {
+    const existing = leads.find(lead => lead.id === body.receiptId && lead.phone === phone && lead.source === "santehnika.seti96.ru");
+    if (!existing) return res.status(404).json({error: "Сохранённая заявка не найдена"});
+    existing.telegram_status = "подтверждено браузером, сервером не проверено";
+    await writeLeads(leads);
+    return res.status(202).json({saved: true, id: existing.id});
+  }
   const created = new Date().toISOString();
   const lead = {
     id: (leads[0]?.id || 0) + 1, created_at: created, name: name || "Не указано",
@@ -203,6 +210,11 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   };
   leads.unshift(lead);
   await writeLeads(leads.slice(0, 2000));
+  if (isPlumbingLead && body.archiveOnly === true) {
+    lead.telegram_status = "ожидает доставки через браузерный шлюз";
+    await writeLeads(leads.slice(0, 2000));
+    return res.status(202).json({saved: true, id: lead.id});
+  }
 
   if (!lead.telegram_status.startsWith("доставлено") && process.env.LEAD_RELAY_URL && process.env.LEAD_RELAY_SECRET) {
     try {
