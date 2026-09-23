@@ -136,7 +136,7 @@ async function deliverPrimaryLeadDirectly(lead) {
     ["yclid", lead.yclid],
   ].filter(([, value]) => value);
   const text = [
-    `<b>Новая заявка с ${lead.source === "uslugi.seti96.ru" ? "uslugi.seti96.ru" : "seti96.ru"}</b>`,
+    `<b>Новая заявка с ${lead.source === "santehnika.seti96.ru" ? "santehnika.seti96.ru" : lead.source === "uslugi.seti96.ru" ? "uslugi.seti96.ru" : "seti96.ru"}</b>`,
     ...(lead.service ? [`<b>Услуга:</b> ${escapeHtml(lead.service)}`] : []),
     ...details.map(([label, value]) => `<b>${label}:</b> ${escapeHtml(value)}`),
   ].join("\n").slice(0, 4000);
@@ -162,7 +162,17 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   const phone = bodyValue(body, "phone", 40);
   const clientType = bodyValue(body, "clientType", 40);
   const isPrimaryLead = isPrimarySeti96Host(req);
-  const deliveredByClientRelay = body.clientRelayDelivered === true;
+  const isPlumbingLead = isSantehnikaHost(req);
+  const deliveryRequired = isPrimaryLead || isPlumbingLead;
+  const deliveredByClientRelay = !isPlumbingLead && body.clientRelayDelivered === true;
+
+  if (isPlumbingLead) {
+    if (bodyValue(body, "website", 200)) return res.status(400).json({error: "Проверьте данные"});
+    if (!/^\+7\d{10}$/.test(phone) || !["Квартира", "Частный дом", "Организация"].includes(clientType)) {
+      return res.status(400).json({error: "Проверьте телефон и тип объекта"});
+    }
+    if (body.consent !== true) return res.status(400).json({error: "Необходимо согласие на обработку данных"});
+  }
 
   if (isPrimaryLead && bodyValue(body, "website", 200)) return res.json({ok: true});
   if (isPrimaryLead && (!/^\+7\d{10}$/.test(phone) || !["Частный дом", "УК / организация"].includes(clientType))) {
@@ -183,7 +193,7 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
     comment: bodyValue(body, "message", 1000) || bodyValue(body, "problem", 1000) || bodyValue(body, "comment", 1000),
     form_place: bodyValue(body, "placement", 100) || bodyValue(body, "formPlace", 100),
     consent_at: body.consent ? created : "", policy_version: body.policyVersion || "",
-    source: bodyValue(body, "source", 300),
+    source: isPlumbingLead ? "santehnika.seti96.ru" : bodyValue(body, "source", 300),
     referrer: bodyValue(body, "referrer", 500), landing: bodyValue(body, "landing", 500),
     utm_source: bodyValue(body, "utm_source", 200), utm_medium: bodyValue(body, "utm_medium", 200),
     utm_campaign: bodyValue(body, "utm_campaign", 200) || bodyValue(body, "campaign", 200),
@@ -230,14 +240,14 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
     }
   }
 
-  if (isPrimaryLead && !lead.telegram_status.startsWith("доставлено")) {
+  if (deliveryRequired && !lead.telegram_status.startsWith("доставлено")) {
     const relayStatus = lead.telegram_status;
     const direct = await deliverPrimaryLeadDirectly(lead);
     lead.telegram_status = direct.ok ? direct.status : `${relayStatus}; ${direct.status}`;
   }
   await writeLeads(leads.slice(0, 2000));
 
-  if (isPrimaryLead && !lead.telegram_status.startsWith("доставлено")) {
+  if (deliveryRequired && !lead.telegram_status.startsWith("доставлено")) {
     return res.status(502).json({
       error: "Не удалось отправить заявку. Обновите страницу и попробуйте ещё раз.",
       saved: true,
