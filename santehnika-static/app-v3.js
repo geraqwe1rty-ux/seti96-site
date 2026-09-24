@@ -13,12 +13,7 @@
   function enableAnalytics() {
     if (analyticsEnabled) return;
     analyticsEnabled = true;
-    window.ym = window.ym || function () { (window.ym.a = window.ym.a || []).push(arguments); };
-    window.ym.l = Date.now();
-    const script = document.createElement('script');
-    script.async = true; script.src = 'https://mc.yandex.ru/metrika/tag.js?id=' + counter;
-    document.head.append(script);
-    window.ym(counter, 'init', {webvisor: true, clickmap: true, accurateTrackBounce: true, trackLinks: true});
+    window.seti96StartAnalytics();
   }
   const cookieNotice = document.querySelector('.cookie-notice');
   let analyticsChoice;
@@ -45,7 +40,7 @@
     tab.addEventListener('click', () => selectTab(tab));
     tab.addEventListener('keydown', e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { e.preventDefault(); const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (index + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length; selectTab(tabs[next]); tabs[next].focus(); } });
   });
-  document.querySelectorAll('[data-task], [data-client]').forEach(a => a.addEventListener('click', () => { if (a.dataset.task) form.elements.task.value = a.dataset.task; if (a.dataset.client) form.elements.clientType.value = a.dataset.client; track('request_open'); }));
+  document.querySelectorAll('a[href="#request"]').forEach(a => a.addEventListener('click', () => { if (a.dataset.task) form.elements.task.value = a.dataset.task; if (a.dataset.client) form.elements.clientType.value = a.dataset.client; track('request_open'); }));
   document.querySelectorAll('a[href^="tel:"]').forEach(a => a.addEventListener('click', () => track('phone_click')));
   phone.addEventListener('input', () => { phone.setCustomValidity(''); errorBox.hidden = true; });
   const normalizePhone = value => { let digits = String(value).replace(/\D/g, ''); if (digits.length === 10) digits = '7' + digits; else if (digits.length === 11 && digits[0] === '8') digits = '7' + digits.slice(1); return /^7\d{10}$/.test(digits) ? '+' + digits : null; };
