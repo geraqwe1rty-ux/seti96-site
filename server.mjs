@@ -4,6 +4,7 @@ import {spawn} from "node:child_process";
 import {mkdir, readFile, rename, writeFile} from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
+import {isTeploHost, createTeploLeadHandler, readTeploLeads} from "./teplo-leads.mjs";
 import {isUslugiHost, createUslugiLeadHandler, readUslugiLeads} from "./uslugi-leads.mjs";
 
 const port = Number(process.env.PORT || 3000);
@@ -17,6 +18,7 @@ const gromkayaSvyazDir = path.resolve("gromkaya-svyaz-static");
 const avariyaDir = path.resolve("avariya-static");
 const prochistkaDir = path.resolve("prochistka-static");
 const uslugiDir = path.resolve("uslugi-static");
+const teploDir = path.resolve("teplo-static");
 const app = express();
 
 await mkdir(dataDir, {recursive: true});
@@ -136,7 +138,7 @@ async function deliverPrimaryLeadDirectly(lead) {
     ["yclid", lead.yclid],
   ].filter(([, value]) => value);
   const text = [
-    `<b>Новая заявка с ${lead.source === "santehnika.seti96.ru" ? "santehnika.seti96.ru" : lead.source === "uslugi.seti96.ru" ? "uslugi.seti96.ru" : "seti96.ru"}</b>`,
+    `<b>Новая заявка с ${lead.source === "teplo.seti96.ru" ? "teplo.seti96.ru" : lead.source === "santehnika.seti96.ru" ? "santehnika.seti96.ru" : lead.source === "uslugi.seti96.ru" ? "uslugi.seti96.ru" : "seti96.ru"}</b>`,
     ...(lead.service ? [`<b>Услуга:</b> ${escapeHtml(lead.service)}`] : []),
     ...details.map(([label, value]) => `<b>${label}:</b> ${escapeHtml(value)}`),
   ].join("\n").slice(0, 4000);
@@ -152,9 +154,10 @@ async function deliverPrimaryLeadDirectly(lead) {
   }
 }
 
-app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-all-leads-v8"}));
+app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-all-leads-v8-teplo-v1"}));
 app.use("/admin", protect);
-app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
+app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
+app.post("/api/leads", express.json({limit: "32kb"}), createTeploLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));
 app.post("/api/leads", express.json({limit: "32kb"}), createUslugiLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   const body = req.body || {};
@@ -295,6 +298,14 @@ app.use((req, res, next) => {
   if (!isUslugiHost(req) || req.path.startsWith("/admin")) return next();
   if (req.method !== "GET" && req.method !== "HEAD") return res.status(405).json({error: "Метод не поддерживается"});
   return express.static(uslugiDir)(req, res, () => res.status(404).sendFile(path.join(uslugiDir,"404","index.html")));
+});
+
+app.use((req, res, next) => {
+  if (!isTeploHost(req) || req.path.startsWith("/admin")) return next();
+  if (req.method !== "GET" && req.method !== "HEAD") return res.status(405).json({error: "Метод не поддерживается"});
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return express.static(teploDir, {extensions: ["html"], maxAge: 0})(req, res, () => res.status(404).sendFile(path.join(teploDir, "404.html")));
 });
 
 const child = spawn(process.execPath, ["node_modules/vinext/dist/cli.js", "start", "--port", String(appPort), "--hostname", "127.0.0.1"], {

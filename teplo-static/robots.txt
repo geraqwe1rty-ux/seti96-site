@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Sitemap: https://teplo.seti96.ru/sitemap.xml
