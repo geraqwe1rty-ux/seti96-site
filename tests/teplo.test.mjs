@@ -32,8 +32,17 @@ test('duplicate simultaneous requests and retries after restart send once',()=>s
 }));
 test('unconfirmed delivery stays saved and cannot be spoofed from browser',()=>sandbox(async dir=>{
  const handler=createTeploLeadHandler({dataDir:dir,env:{},deliverDirect:async()=>({ok:false}),fetchImpl:async()=>({ok:true,json:async()=>({ok:true})})});
- const res=response();await handler(request({...base(),clientRelayDelivered:true,browserRelayReceipt:true,archiveOnly:true}),res,()=>{});
+ const res=response();await handler(request({...base(),clientRelayDelivered:true}),res,()=>{});
  assert.equal(res.code,502);assert.equal(res.data.ok,undefined);assert.equal(res.data.saved,true);assert.equal((await readTeploLeads(dir))[0].telegram_status,'доставка не подтверждена');
+}));
+test('browser relay archives first; a client receipt never becomes server-confirmed delivery',()=>sandbox(async dir=>{
+ const handler=createTeploLeadHandler({dataDir:dir,env,deliverDirect:()=>{throw Error('archive must not send');},fetchImpl:()=>{throw Error('archive must not send');}});
+ const body=base();const archived=response();await handler(request({...body,archiveOnly:true}),archived,()=>{});
+ assert.equal(archived.code,202);assert.equal(archived.data.saved,true);assert.equal(archived.data.ok,undefined);
+ const badReceipt=response();await handler(request({...body,browserRelayReceipt:true,receiptId:'unknown'}),badReceipt,()=>{});assert.equal(badReceipt.code,400);
+ const receipt=response();await handler(request({...body,browserRelayReceipt:true,receiptId:archived.data.id}),receipt,()=>{});
+ assert.equal(receipt.code,202);assert.equal(receipt.data.delivery,'browser-reported');assert.equal(receipt.data.ok,undefined);
+ const rows=await readTeploLeads(dir);assert.equal(rows.length,1);assert.equal(rows[0].telegram_status,'подтверждено браузером, сервером не проверено');
 }));
 test('fallback relay preserves thermal request and campaign metadata',()=>sandbox(async dir=>{
  let payload;const handler=createTeploLeadHandler({dataDir:dir,env,deliverDirect:async()=>({ok:false}),fetchImpl:async(url,options)=>{assert.equal(url,'https://seti96-engineering.german123312.chatgpt.site/api/leads');payload=JSON.parse(options.body);return {ok:true,json:async()=>({ok:true,delivery:'доставлено'})};}});

@@ -154,7 +154,7 @@ async function deliverPrimaryLeadDirectly(lead) {
   }
 }
 
-app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-all-leads-v8-teplo-v1"}));
+app.get("/health", (_req, res) => res.json({ok: true, release: "telegram-all-leads-v8-teplo-v2"}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
 app.post("/api/leads", express.json({limit: "32kb"}), createTeploLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));

@@ -30,7 +30,7 @@ const emailLink = document.querySelector('#dialog-email');
 let lastTrigger = null;
 
 function track(name, details = {}) {
-  // Local event hook for connecting an owner's analytics counter later.
+  // Conversion hooks contain no form contact details.
   window.dispatchEvent(new CustomEvent('seti96:conversion', { detail: { name, ...details } }));
   const goal = name.startsWith('phone_') ? 'phone_click' : name.startsWith('email_') ? 'email_click' : name;
   window.seti96TrackGoal?.(goal, {place: name, ...details});
@@ -101,6 +101,29 @@ function normalizedPhone(input){
   return digits.length===10?'+7'+digits:null;
 }
 form.elements.phone.addEventListener('input',()=>form.elements.phone.setCustomValidity(''));
+function deliverThroughCompanyBrowser(payload){
+  return new Promise((resolve,reject)=>{
+    const origin='https://prochistka.seti96.ru';
+    const frame=document.createElement('iframe');
+    frame.hidden=true;frame.title='Доставка заявки';
+    frame.src=origin+'/teplo-relay.html';
+    const id=payload.requestId;
+    let started=false;
+    const cleanup=()=>{clearTimeout(timer);window.removeEventListener('message',receive);frame.remove();};
+    const fail=()=>{cleanup();reject(new Error('Заявка сохранена, но доставка специалисту пока не подтверждена. Повторите попытку или позвоните: +7 993 106-04-23.'));};
+    function receive(event){
+      if(event.origin!==origin||event.source!==frame.contentWindow)return;
+      if(event.data?.type==='teplo-relay-ready'&&!started){started=true;frame.contentWindow.postMessage({type:'teplo-lead',id,payload},origin);}
+      if(event.data?.type==='teplo-lead-result'&&event.data.id===id){
+        if(event.data.ok===true){cleanup();resolve();}else fail();
+      }
+    }
+    const timer=setTimeout(fail,30000);
+    window.addEventListener('message',receive);
+    frame.addEventListener('error',fail,{once:true});
+    document.body.append(frame);
+  });
+}
 form.addEventListener('submit',async event=>{
   event.preventDefault();if(sending)return;
   errorBox.hidden=true;
@@ -114,9 +137,13 @@ form.addEventListener('submit',async event=>{
   sending=true;submitButton.disabled=true;submitButton.textContent='Отправляем…';
   form.setAttribute('aria-busy','true');
   try{
-    const response=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(35000)});
+    const response=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,archiveOnly:true}),signal:AbortSignal.timeout(15000)});
     const result=await response.json();
-    if(!response.ok||result.ok!==true||result.delivery!=='confirmed')throw new Error(result.error||'Не удалось подтвердить доставку. Повторите попытку или позвоните нам.');
+    if(!response.ok||!result.id||(!result.saved&&result.delivery!=='confirmed'))throw new Error(result.error||'Не удалось сохранить заявку. Повторите попытку или позвоните нам.');
+    if(result.delivery!=='confirmed'){
+      await deliverThroughCompanyBrowser({...payload,leadId:result.id,message:[fields.topic,fields.message].filter(Boolean).join('\n')});
+      fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,browserRelayReceipt:true,receiptId:result.id}),keepalive:true}).catch(()=>{});
+    }
     form.hidden=true;successBox.hidden=false;successBox.focus();
     track('lead_sent',{place:formPlace,object_type:fields.clientType,topic:fields.topic});
     form.reset();

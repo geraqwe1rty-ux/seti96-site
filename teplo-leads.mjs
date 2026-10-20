@@ -48,12 +48,21 @@ export function createTeploLeadHandler({dataDir, deliverDirect, fetchImpl=fetch,
     writes = operation.catch(()=>{});
     return operation;
   };
-  async function processLead(lead) {
+  async function processLead(lead, body) {
     const existing = (await readTeploLeads(dataDir)).find(row=>row.id===lead.id);
     if (existing) {
       if (existing.fingerprint !== lead.fingerprint) return {code:409,data:{error:'Данные заявки изменились. Обновите форму.'}};
       lead = existing;
       if (lead.telegram_status.startsWith('доставлено')) return {code:200,data:{ok:true,id:lead.id,delivery:'confirmed'}};
+    }
+    if (body.browserRelayReceipt === true) {
+      if (!existing || body.receiptId !== lead.id) return {code:400,data:{error:'Не найдена сохранённая заявка'}};
+      lead.telegram_status='подтверждено браузером, сервером не проверено';
+      lead.updated_at=new Date().toISOString();
+      await save(lead);
+      return {code:202,data:{saved:true,id:lead.id,delivery:'browser-reported'}};
+    }
+    if (existing) {
       if (Date.now() - Number(lead.last_attempt_at || 0) < 10000) return {code:429,data:{saved:true,id:lead.id,error:'Заявка сохранена. Подождите несколько секунд перед повторной отправкой.'}};
     }
     const now=Date.now();
@@ -64,6 +73,7 @@ export function createTeploLeadHandler({dataDir, deliverDirect, fetchImpl=fetch,
     lead.delivery_attempts++;lead.last_attempt_at=now;
     lead.telegram_status='ожидает доставки';
     await save(lead);
+    if (body.archiveOnly === true) return {code:202,data:{saved:true,id:lead.id,delivery:'pending'}};
     let delivered=false;
     if(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
       try { const result=await deliverDirect({...lead,comment:[lead.topic,lead.comment].filter(Boolean).join('\n')}); delivered=result.ok===true; }
@@ -97,7 +107,7 @@ export function createTeploLeadHandler({dataDir, deliverDirect, fetchImpl=fetch,
     const pending=active.get(lead.id);
     if(pending && pending.fingerprint!==lead.fingerprint) return res.status(409).json({error:'Данные заявки изменились. Обновите форму.'});
     if(!pending) {
-      const promise=processLead(lead).finally(()=>active.delete(lead.id));
+      const promise=processLead(lead, req.body).finally(()=>active.delete(lead.id));
       active.set(lead.id,{fingerprint:lead.fingerprint,promise});
     }
     try {const result=await active.get(lead.id).promise;return res.status(result.code).json(result.data);}
