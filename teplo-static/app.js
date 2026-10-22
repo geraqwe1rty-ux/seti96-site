@@ -137,15 +137,17 @@ form.addEventListener('submit',async event=>{
   sending=true;submitButton.disabled=true;submitButton.textContent='Отправляем…';
   form.setAttribute('aria-busy','true');
   try{
-    const response=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,archiveOnly:true}),signal:AbortSignal.timeout(15000)});
+    const response=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,archiveOnly:true}),signal:AbortSignal.timeout(25000)});
     const result=await response.json();
     if(!response.ok||!result.id||(!result.saved&&result.delivery!=='confirmed'))throw new Error(result.error||'Не удалось сохранить заявку. Повторите попытку или позвоните нам.');
-    if(result.delivery!=='confirmed'){
+    if(result.delivery!=='confirmed'&&result.delivery!=='queued'){
       await deliverThroughCompanyBrowser({...payload,leadId:result.id,message:[fields.topic,fields.message].filter(Boolean).join('\n')});
       fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,browserRelayReceipt:true,receiptId:result.id}),keepalive:true}).catch(()=>{});
     }
+    successBox.querySelector('h3').textContent=result.delivery==='queued'?'Заявка принята':'Заявка отправлена';
+    successBox.querySelector('p').textContent=result.delivery==='queued'?'Обращение сохранено. Уведомление специалисту отправляется автоматически. Повторно заполнять форму не нужно.':'Мы получили ваше обращение и свяжемся с вами, чтобы обсудить обследование.';
     form.hidden=true;successBox.hidden=false;successBox.focus();
-    track('lead_sent',{place:formPlace,object_type:fields.clientType,topic:fields.topic});
+    track(result.delivery==='queued'?'lead_accepted':'lead_sent',{place:formPlace,object_type:fields.clientType,topic:fields.topic});
     form.reset();
   }catch(error){
     errorBox.textContent=error.name==='TimeoutError'||error instanceof TypeError?'Не удалось получить подтверждение. Проверьте соединение и повторите отправку или позвоните: +7 993 106-04-23.':error.message;

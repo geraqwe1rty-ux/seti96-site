@@ -5,6 +5,7 @@ import {mkdir, readFile, rename, writeFile} from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import {isTeploHost, createTeploLeadHandler, readTeploLeads} from "./teplo-leads.mjs";
+import {createTeploOutbox} from "./teplo-outbox.mjs";
 import {isUslugiHost, createUslugiLeadHandler, readUslugiLeads} from "./uslugi-leads.mjs";
 
 const port = Number(process.env.PORT || 3000);
@@ -144,7 +145,10 @@ async function deliverPrimaryLeadDirectly(lead) {
   ].join("\n").slice(0, 4000);
 
   try {
-    const {status, telegram} = await postTelegramOverIpv4(token, {chat_id: chatId, text, parse_mode: "HTML"});
+    let {status, telegram} = await postTelegramOverIpv4(token, {chat_id: chatId, text, parse_mode: "HTML"});
+    if (!telegram.ok && telegram.parameters?.migrate_to_chat_id) {
+      ({status, telegram} = await postTelegramOverIpv4(token, {chat_id: String(telegram.parameters.migrate_to_chat_id), text, parse_mode: "HTML"}));
+    }
     return status >= 200 && status < 300 && telegram.ok
       ? {ok: true, status: "доставлено (напрямую)"}
       : {ok: false, status: `Telegram ${status}${telegram.description ? `: ${String(telegram.description).slice(0, 160)}` : ""}`};
@@ -154,10 +158,17 @@ async function deliverPrimaryLeadDirectly(lead) {
   }
 }
 
-app.get("/health", (req, res) => res.json({ok: true, release: "telegram-all-leads-v8-teplo-v2-diagnostics", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
+app.get("/health", (req, res) => res.json({ok: true, release: "telegram-all-leads-v8-teplo-v3", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
-app.post("/api/leads", express.json({limit: "32kb"}), createTeploLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));
+const teploDirectReady=Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim());
+const teploOutbox=createTeploOutbox({dataDir,deliverDirect:deliverPrimaryLeadDirectly});
+if(teploDirectReady){
+  const drain=()=>teploOutbox.drain().catch(error=>console.error("Teplo outbox retry failed",error?.code||"processing_error"));
+  setInterval(drain,15000).unref();
+  void drain();
+}
+app.post("/api/leads", express.json({limit: "32kb"}), teploDirectReady ? teploOutbox.handler : createTeploLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));
 app.post("/api/leads", express.json({limit: "32kb"}), createUslugiLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));
 app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   const body = req.body || {};
