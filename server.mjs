@@ -151,14 +151,14 @@ async function deliverPrimaryLeadDirectly(lead) {
     }
     return status >= 200 && status < 300 && telegram.ok
       ? {ok: true, status: "доставлено (напрямую)"}
-      : {ok: false, status: `Telegram ${status}${telegram.description ? `: ${String(telegram.description).slice(0, 160)}` : ""}`};
+      : {ok: false, code: `telegram_http_${status}`, reason: /chat not found/i.test(String(telegram.description || "")) ? "chat_not_found" : /unauthorized/i.test(String(telegram.description || "")) ? "unauthorized" : /kicked|not a member|not enough rights/i.test(String(telegram.description || "")) ? "chat_permission_denied" : "request_rejected", status: `Telegram ${status}${telegram.description ? `: ${String(telegram.description).slice(0, 160)}` : ""}`};
   } catch (error) {
     console.error("Direct Telegram delivery failed", escapeHtml(error?.message));
-    return {ok: false, status: error?.code === "ETIMEDOUT" ? "Telegram IPv4: тайм-аут" : "Telegram IPv4: ошибка соединения"};
+    return {ok: false, code: error?.code === "ETIMEDOUT" ? "telegram_timeout" : "telegram_connection_error", status: error?.code === "ETIMEDOUT" ? "Telegram IPv4: тайм-аут" : "Telegram IPv4: ошибка соединения"};
   }
 }
 
-app.get("/health", (req, res) => res.json({ok: true, release: "telegram-all-leads-v8-teplo-v3", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
+app.get("/health", (req, res) => res.json({ok: true, release: "telegram-all-leads-v8-teplo-v3-status", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
 const teploDirectReady=Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim());

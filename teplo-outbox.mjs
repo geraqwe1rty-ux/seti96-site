@@ -18,7 +18,7 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now}) {
   const confirmed=lead=>String(lead.telegram_status).startsWith('доставлено');
   const result=lead=>confirmed(lead)
     ? {code:200,data:{ok:true,saved:true,id:lead.id,delivery:'confirmed'}}
-    : {code:202,data:{ok:true,saved:true,id:lead.id,delivery:'queued'}};
+    : {code:202,data:{ok:true,saved:true,id:lead.id,delivery:'queued',error_code:lead.delivery_error||null}};
   async function deliver(lead){
     lead.delivery_attempts=(lead.delivery_attempts||0)+1;
     lead.last_attempt_at=now();
@@ -29,7 +29,7 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now}) {
     try{
       const delivered=await deliverDirect({...lead,comment:[lead.topic,lead.comment].filter(Boolean).join('\n')});
       if(delivered?.ok===true){lead.telegram_status='доставлено (напрямую)';lead.next_attempt_at=null;lead.delivered_at=new Date(now()).toISOString();}
-      else lead.delivery_error='telegram_not_acknowledged';
+      else lead.delivery_error=[delivered?.code||'telegram_not_acknowledged',delivered?.reason].filter(Boolean).join(':');
     }catch{lead.delivery_error='telegram_connection_failed';}
     lead.updated_at=new Date(now()).toISOString();
     await save(lead);return result(lead);
