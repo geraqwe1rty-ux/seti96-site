@@ -3,10 +3,10 @@ import path from 'node:path';
 import {isTeploHost, readTeploLeads, validateTeploLead} from './teplo-leads.mjs';
 
 // One delivery worker per Node process. DATA_DIR must be a persistent volume.
-export function createTeploOutbox({dataDir, deliverDirect, now=Date.now}) {
+export function createTeploOutbox({dataDir, deliverDirect, now=Date.now, matches=isTeploHost, validate=validateTeploLead, readRecords=readTeploLeads, fileName='teplo-leads.ndjson'}) {
   const active=new Map(), rate=new Map();
   let writes=Promise.resolve(), draining=false;
-  const file=path.join(dataDir,'teplo-leads.ndjson');
+  const file=path.join(dataDir,fileName);
   const save=lead=>{
     const line=JSON.stringify(lead)+'\n';
     const operation=writes.then(async()=>{
@@ -35,7 +35,7 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now}) {
     await save(lead);return result(lead);
   }
   async function accept(incoming){
-    let lead=(await readTeploLeads(dataDir)).find(row=>row.id===incoming.id);
+    let lead=(await readRecords(dataDir)).find(row=>row.id===incoming.id);
     if(lead){
       if(lead.fingerprint!==incoming.fingerprint)return {code:409,data:{error:'Данные заявки изменились. Обновите форму.'}};
       if(confirmed(lead))return result(lead);
@@ -52,10 +52,10 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now}) {
   async function drain(){
     if(draining)return;draining=true;
     try{
-      for(const candidate of await readTeploLeads(dataDir)){
+      for(const candidate of await readRecords(dataDir)){
         if(candidate.delivery_engine!=='server-v3'||confirmed(candidate)||candidate.next_attempt_at>now()||active.has(candidate.id))continue;
         const promise=(async()=>{
-          const latest=(await readTeploLeads(dataDir)).find(row=>row.id===candidate.id);
+          const latest=(await readRecords(dataDir)).find(row=>row.id===candidate.id);
           if(!latest||confirmed(latest)||latest.next_attempt_at>now())return;
           return deliver(latest);
         })().finally(()=>active.delete(candidate.id));
@@ -65,9 +65,9 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now}) {
     }finally{draining=false;}
   }
   async function handler(req,res,next){
-    if(!isTeploHost(req))return next();
+    if(!matches(req))return next();
     res.set?.('Cache-Control','no-store');
-    const parsed=validateTeploLead(req.body);
+    const parsed=validate(req.body);
     if(parsed.error)return res.status(400).json({error:parsed.error});
     const {lead}=parsed;
     let job=active.get(lead.id);
@@ -79,7 +79,7 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now}) {
     try{
       const answer=await job.promise;
       // A concurrent background worker may already have acknowledged this record.
-      const resolved=answer||result((await readTeploLeads(dataDir)).find(row=>row.id===lead.id));
+      const resolved=answer||result((await readRecords(dataDir)).find(row=>row.id===lead.id));
       return res.status(resolved.code).json(resolved.data);
     }catch(error){
       console.error('Teplo outbox processing failed',error?.code||'storage_error');
@@ -88,3 +88,4 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now}) {
   }
   return {handler,drain};
 }
+

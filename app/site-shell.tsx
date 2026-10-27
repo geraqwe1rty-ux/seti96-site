@@ -9,7 +9,6 @@ const METRIKA_ID = 111900032;
 const PHONE = "+7 993 106-04-23";
 const PHONE_HREF = "tel:+79931060423";
 const EMAIL = "seti-96@yandex.ru";
-const TELEGRAM_RELAY_URL = "https://seti96-engineering.german123312.chatgpt.site/api/leads";
 
 type PageName = "home" | "dom" | "org" | "blog" | "contacts" | "article";
 type ClientType = "Частный дом" | "УК / организация";
@@ -92,24 +91,22 @@ function getAttribution() {
   };
 }
 
+const pendingRequests = new Map<string, string>();
 async function postLead(payload: Record<string, string>) {
-  const attributedPayload = {...payload, ...getAttribution()};
-  const relayResponse = await fetch(TELEGRAM_RELAY_URL, {
-    method: "POST",
-    headers: {"content-type": "application/json"},
-    body: JSON.stringify(attributedPayload),
+  const key = JSON.stringify([payload.phone, payload.name, payload.clientType, payload.message]);
+  const requestId = pendingRequests.get(key) || crypto.randomUUID();
+  pendingRequests.set(key, requestId);
+  const response = await fetch("/api/heating-leads", {
+    method: "POST", headers: {"content-type": "application/json"},
+    body: JSON.stringify({...payload, ...getAttribution(), requestId, consent: true}),
+    signal: AbortSignal.timeout(25000),
   });
-  if (!relayResponse.ok) {
-    const data = (await relayResponse.json().catch(() => null)) as {error?: string} | null;
-    throw new Error(data?.error || "Не удалось отправить заявку");
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.ok !== true || data?.saved !== true || !data?.id) {
+    throw new Error(data?.error || "Не удалось подтвердить заявку. Повторите отправку или позвоните нам.");
   }
-
-  await fetch("/api/leads", {
-    method: "POST",
-    headers: {"content-type": "application/json"},
-    body: JSON.stringify({...attributedPayload, clientRelayDelivered: true}),
-    keepalive: true,
-  }).catch(() => undefined);
+  if (data.thankYouUrl === "/spasibo") window.location.assign(data.thankYouUrl);
+  return data;
 }
 
 export default function SiteShell({
@@ -824,6 +821,7 @@ function QuickLeadForm({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy) return;
     setError("");
     const normalized = normalizePhone(phone);
     if (!normalized) {
@@ -845,8 +843,6 @@ function QuickLeadForm({
         consent: "true",
         policyVersion: "2026-09-12",
       });
-      metricGoal("lead_success", {page, placement, client_type: selectedClient});
-      metricGoal(selectedClient === "Частный дом" ? "private_lead" : "organization_lead", {page, placement});
       setSent(true);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Не удалось отправить заявку");
@@ -957,6 +953,7 @@ function LeadModal({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy) return;
     setError("");
     const normalized = normalizePhone(phone);
     if (!normalized) {
@@ -978,8 +975,6 @@ function LeadModal({
         consent: "true",
         policyVersion: "2026-09-12",
       });
-      metricGoal("lead_success", {page, placement, client_type: selectedClient});
-      metricGoal(selectedClient === "Частный дом" ? "private_lead" : "organization_lead", {page, placement});
       setSent(true);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Не удалось отправить заявку");

@@ -144,6 +144,7 @@ form.addEventListener('submit',async event=>{
       await deliverThroughCompanyBrowser({...payload,leadId:result.id,message:[fields.topic,fields.message].filter(Boolean).join('\n')});
       fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,browserRelayReceipt:true,receiptId:result.id}),keepalive:true}).catch(()=>{});
     }
+    if(result.thankYouUrl==='/spasibo'){location.assign(result.thankYouUrl);return;}
     successBox.querySelector('h3').textContent=result.delivery==='queued'?'Заявка принята':'Заявка отправлена';
     successBox.querySelector('p').textContent=result.delivery==='queued'?'Обращение сохранено. Уведомление специалисту отправляется автоматически. Повторно заполнять форму не нужно.':'Мы получили ваше обращение и свяжемся с вами, чтобы обсудить обследование.';
     form.hidden=true;successBox.hidden=false;successBox.focus();
@@ -154,3 +155,4 @@ form.addEventListener('submit',async event=>{
     errorBox.hidden=false;track('lead_error',{place:formPlace});
   }finally{sending=false;submitButton.disabled=false;submitButton.textContent='Отправить заявку';form.removeAttribute('aria-busy');}
 });
+

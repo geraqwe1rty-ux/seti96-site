@@ -6,6 +6,8 @@ import https from "node:https";
 import path from "node:path";
 import {isTeploHost, createTeploLeadHandler, readTeploLeads} from "./teplo-leads.mjs";
 import {createTeploOutbox} from "./teplo-outbox.mjs";
+import {createHeatingOutbox, readHeatingLeads, isHeatingHost} from "./heating-leads.mjs";
+import {createLeadReceipts} from "./lead-receipts.mjs";
 import {isUslugiHost, createUslugiLeadHandler, readUslugiLeads} from "./uslugi-leads.mjs";
 
 const port = Number(process.env.PORT || 3000);
@@ -20,6 +22,9 @@ const avariyaDir = path.resolve("avariya-static");
 const prochistkaDir = path.resolve("prochistka-static");
 const uslugiDir = path.resolve("uslugi-static");
 const teploDir = path.resolve("teplo-static");
+const heatingDir = path.resolve("heating-static");
+const thanksTemplate = await readFile(path.resolve("lead-thanks.html"), "utf8");
+const receipts = createLeadReceipts();
 const app = express();
 
 await mkdir(dataDir, {recursive: true});
@@ -158,15 +163,25 @@ async function deliverPrimaryLeadDirectly(lead) {
   }
 }
 
-app.get("/health", (req, res) => res.json({ok: true, release: "telegram-all-leads-v8-teplo-v3-status", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
+app.get("/health", (req, res) => res.json({ok: true, release: "heating-landing-20261027-v1", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
 app.use("/admin", protect);
-app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
+app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir)), ...(await readHeatingLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
+app.use(["/api/leads", "/api/heating-leads"], (req,res,next)=>(isHeatingHost(req)||isTeploHost(req))?receipts.attach(req,res,next):next());
 const teploDirectReady=Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim());
 const teploOutbox=createTeploOutbox({dataDir,deliverDirect:deliverPrimaryLeadDirectly});
+const heatingOutbox=createHeatingOutbox({dataDir,deliverDirect:deliverPrimaryLeadDirectly});
+app.post("/api/heating-leads", express.json({limit:"32kb"}), (req,res,next)=>{
+  if(!isHeatingHost(req))return res.status(404).json({error:"Не найдено"});
+  if(req.headers.origin && !["https://seti96.ru","https://www.seti96.ru",`http://${req.headers.host}`].includes(req.headers.origin))return res.status(403).json({error:"Недопустимый источник"});
+  return heatingOutbox.handler(req,res,next);
+});
 if(teploDirectReady){
   const drain=()=>teploOutbox.drain().catch(error=>console.error("Teplo outbox retry failed",error?.code||"processing_error"));
   setInterval(drain,15000).unref();
   void drain();
+  const drainHeating=()=>heatingOutbox.drain().catch(error=>console.error("Heating delivery retry failed",error?.code||"processing_error"));
+  setInterval(drainHeating,15000).unref();
+  void drainHeating();
 }
 app.post("/api/leads", express.json({limit: "32kb"}), teploDirectReady ? teploOutbox.handler : createTeploLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));
 app.post("/api/leads", express.json({limit: "32kb"}), createUslugiLeadHandler({dataDir, deliverDirect: deliverPrimaryLeadDirectly}));
@@ -283,6 +298,16 @@ app.post("/api/leads", express.json({limit: "32kb"}), async (req, res) => {
   return res.json({ok: true, delivery: lead.telegram_status});
 });
 
+app.get("/spasibo", (req,res,next)=>{
+  if(!isHeatingHost(req)&&!isTeploHost(req))return next();
+  res.set({"Cache-Control":"no-store, private", "X-Robots-Tag":"noindex, nofollow", "Referrer-Policy":"no-referrer"});
+  if(req.method==='HEAD')return res.status(204).end();
+  const receipt=receipts.consume(req);
+  if(!receipt)return res.redirect(303,isTeploHost(req)?"/":"/promyvka/");
+  res.set("Set-Cookie","seti96_receipt=; Path=/spasibo; Max-Age=0; HttpOnly; SameSite=Lax; Secure");
+  return res.type("html").send(thanksTemplate.replace('__RECEIPT_JSON__',JSON.stringify(receipt)));
+});
+app.use("/promyvka",(req,res,next)=>isHeatingHost(req)?express.static(heatingDir,{maxAge:0})(req,res,next):next());
 app.get("/", (req, res, next) => isElectroHost(req) ? res.sendFile(path.join(electroDir, "index.html")) : next());
 app.get("/politika", (req, res, next) => isElectroHost(req) ? res.sendFile(path.join(electroDir, "politika.html")) : next());
 app.use((req, res, next) => isElectroHost(req) ? express.static(electroDir, {index: false})(req, res, next) : next());
@@ -330,3 +355,4 @@ function stop(signal) { child.kill(signal); server.close(() => process.exit(0));
 process.on("SIGTERM", () => stop("SIGTERM"));
 process.on("SIGINT", () => stop("SIGINT"));
 child.on("exit", code => { if (code) process.exit(code); });
+
