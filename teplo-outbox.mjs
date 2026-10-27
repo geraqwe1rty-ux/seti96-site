@@ -43,7 +43,7 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now, matches
     }else{
       for(const [key,value] of rate)if(now()-value.at>=600000)rate.delete(key);
       const entry=rate.get(incoming.phone)||{at:now(),count:0};
-      if(entry.count>=5)return {code:429,data:{error:'Слишком много заявок. Позвоните нам: +7 993 106-04-23.'}};
+      if(entry.count>=5)return {code:429,data:{error:'Слишком много заявок. Подождите 10 минут и повторите отправку.'}};
       entry.count++;rate.set(incoming.phone,entry);lead=incoming;
     }
     lead.delivery_engine='server-v3';
@@ -83,7 +83,7 @@ export function createTeploOutbox({dataDir, deliverDirect, now=Date.now, matches
       return res.status(resolved.code).json(resolved.data);
     }catch(error){
       console.error('Teplo outbox processing failed',error?.code||'storage_error');
-      return res.status(503).json({error:'Не удалось подтвердить сохранение заявки. Повторите попытку или позвоните нам.'});
+      return res.status(503).json({error:'Не удалось подтвердить сохранение заявки. Проверьте соединение и повторите отправку.'});
     }
   }
   return {handler,drain};

@@ -44,11 +44,11 @@
     try{
       const response=await fetch('/api/heating-leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(25000)});
       const result=await response.json().catch(()=>null);
-      if(!response.ok||result?.ok!==true||result.saved!==true||!result.id)throw new Error(result?.error||'Не удалось подтвердить заявку. Повторите отправку или позвоните нам.');
+      if(!response.ok||result?.ok!==true||result.saved!==true||!result.id)throw new Error(result?.error||'Не удалось подтвердить заявку. Проверьте соединение и повторите отправку.');
       if(result.thankYouUrl==='/spasibo'){location.assign('/spasibo');return;}
       form.hidden=true;document.querySelector('#form-success').hidden=false;
     }catch(error){
-      errorBox.textContent=error.name==='TimeoutError'||error instanceof TypeError?'Не получили подтверждение отправки. Повторите попытку или позвоните: +7 993 106-04-23.':error.message;
+      errorBox.textContent=error.name==='TimeoutError'||error instanceof TypeError?'Не получили подтверждение отправки. Проверьте соединение и повторите отправку.':error.message;
       errorBox.hidden=false;track('lead_error');
     }finally{sending=false;submit.disabled=false;submit.innerHTML='Обсудить мою задачу <span aria-hidden="true">↗</span>';form.removeAttribute('aria-busy')}
   });
@@ -57,7 +57,7 @@
     diagnosis:['Проверяем причину','Холодная батарея не всегда означает засор. Оценим нагрев, циркуляцию и доступные элементы системы. По результату объясним, нужна ли промывка или следует искать другую неисправность.'],
     price:['Согласуем объём и стоимость','Стоимость зависит от оборудования, объёма системы, состояния и подключения. Уточним симптомы и адрес, обсудим обследование. Объём, технологию и стоимость работ согласуем до начала.'],
     work:['Промываем, если это нужно','Если причина в отложениях, подберём способ промывки под материал и состояние системы. После очистки промоем контур водой и проверим работу. Заранее обещать одинаковый результат для разных неисправностей нельзя.'],
-    company:['Сети96 · инженерные услуги','Работаем в Екатеринбурге и на объектах до 50 км от города. Частные дома, квартиры и организации. ООО «Танзанит», ИНН 6670234728, ОГРН 1086670038509. Юридический адрес: Екатеринбург, ул. Вишнёвая, д. 69Б, офис 9. Телефон: +7 993 106-04-23. Электронная почта: seti-96@yandex.ru.']
+    company:['Сети96 · инженерные услуги','Работаем в Екатеринбурге и на объектах до 50 км от города. Частные дома, квартиры и организации. ООО «Танзанит», ИНН 6670234728, ОГРН 1086670038509. Юридический адрес: Екатеринбург, ул. Вишнёвая, д. 69Б, офис 9. Электронная почта: seti-96@yandex.ru.']
   };
   const dialog=document.querySelector('#details');let opener;
   document.querySelectorAll('[data-detail]').forEach(button=>button.addEventListener('click',()=>{

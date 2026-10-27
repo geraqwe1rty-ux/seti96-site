@@ -33,7 +33,6 @@ const organization = {
   name: "Сети96",
   legalName: "ООО «Танзанит»",
   url: "https://seti96.ru",
-  telephone: "+79931060423",
   email: "seti-96@yandex.ru",
   address: {
     "@type": "PostalAddress",

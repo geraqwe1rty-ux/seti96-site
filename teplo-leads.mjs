@@ -68,7 +68,7 @@ export function createTeploLeadHandler({dataDir, deliverDirect, fetchImpl=fetch,
     const now=Date.now();
     for (const [key,entry] of rate) if(now-entry.at>600000) rate.delete(key);
     const count=rate.get(lead.phone)||{at:now,count:0};
-    if(count.count>=5) return {code:429,data:{error:'Слишком много попыток. Позвоните нам: +7 993 106-04-23.'}};
+    if(count.count>=5) return {code:429,data:{error:'Слишком много попыток. Подождите 10 минут и повторите отправку.'}};
     count.count++;rate.set(lead.phone,count);
     lead.delivery_attempts++;lead.last_attempt_at=now;
     lead.telegram_status='ожидает доставки';
@@ -96,7 +96,7 @@ export function createTeploLeadHandler({dataDir, deliverDirect, fetchImpl=fetch,
     await save(lead);
     return delivered
       ? {code:200,data:{ok:true,id:lead.id,delivery:'confirmed'}}
-      : {code:502,data:{saved:true,id:lead.id,error:'Заявка сохранена, но доставка специалисту пока не подтверждена. Повторите попытку или позвоните: +7 993 106-04-23.'}};
+      : {code:502,data:{saved:true,id:lead.id,error:'Заявка сохранена, но доставка специалисту пока не подтверждена. Повторите отправку через несколько минут.'}};
   }
   return async function(req,res,next) {
     if(!isTeploHost(req)) return next();
@@ -111,6 +111,6 @@ export function createTeploLeadHandler({dataDir, deliverDirect, fetchImpl=fetch,
       active.set(lead.id,{fingerprint:lead.fingerprint,promise});
     }
     try {const result=await active.get(lead.id).promise;return res.status(result.code).json(result.data);}
-    catch(error) {console.error('Teplo lead processing failed:',error?.code||'processing-error');return res.status(503).json({error:'Не удалось подтвердить обработку заявки. Повторите попытку или позвоните нам.'});}
+    catch(error) {console.error('Teplo lead processing failed:',error?.code||'processing-error');return res.status(503).json({error:'Не удалось подтвердить обработку заявки. Проверьте соединение и повторите отправку.'});}
   };
 }

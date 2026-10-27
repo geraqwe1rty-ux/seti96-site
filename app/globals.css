@@ -1970,7 +1970,7 @@ h3 {
     bottom: 0;
     left: 0;
     display: grid;
-    grid-template-columns: 0.8fr 1.2fr;
+    grid-template-columns: 1fr;
     gap: 8px;
     padding: 8px;
     border-top: 1px solid #353a34;
@@ -2060,3 +2060,6 @@ h3 {
     transition-duration: 0.01ms !important;
   }
 }
+
+.footer-request {border:0;padding:0;background:none;color:#fff;font:inherit;font-size:16px;font-weight:750;cursor:pointer;text-align:left}
+.footer-request:hover {color:var(--accent)}

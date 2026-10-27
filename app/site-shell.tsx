@@ -6,8 +6,6 @@ import Link from "next/link";
 import {articles, type ArticleData} from "./articles";
 
 const METRIKA_ID = 111900032;
-const PHONE = "+7 993 106-04-23";
-const PHONE_HREF = "tel:+79931060423";
 const EMAIL = "seti-96@yandex.ru";
 
 type PageName = "home" | "dom" | "org" | "blog" | "contacts" | "article";
@@ -103,7 +101,7 @@ async function postLead(payload: Record<string, string>) {
   });
   const data = await response.json().catch(() => null);
   if (!response.ok || data?.ok !== true || data?.saved !== true || !data?.id) {
-    throw new Error(data?.error || "Не удалось подтвердить заявку. Повторите отправку или позвоните нам.");
+    throw new Error(data?.error || "Не удалось подтвердить заявку. Проверьте соединение и повторите отправку.");
   }
   if (data.thankYouUrl === "/spasibo") window.location.assign(data.thankYouUrl);
   return data;
@@ -166,7 +164,6 @@ export default function SiteShell({
     setMenuOpen(false);
     setModal(true);
   };
-  const phoneClick = (placement: string) => metricGoal("phone_click", {page, placement});
 
   return (
     <div className="site">
@@ -189,15 +186,8 @@ export default function SiteShell({
               </Link>
             );
           })}
-          <a className="nav-phone" href={PHONE_HREF} onClick={() => phoneClick("mobile_menu")}>
-            {PHONE}
-          </a>
         </nav>
         <div className="header-actions">
-          <a className="header-phone" href={PHONE_HREF} onClick={() => phoneClick("header")}>
-            <small>Позвонить специалисту</small>
-            <b>{PHONE}</b>
-          </a>
           <button className="header-cta" type="button" onClick={() => openModal("header")}>
             Рассчитать стоимость
           </button>
@@ -217,7 +207,7 @@ export default function SiteShell({
 
       <main>
         {page === "home" && (
-          <HomePage page={page} openModal={openModal} phoneClick={phoneClick} metricGoal={metricGoal} />
+          <HomePage page={page} openModal={openModal} metricGoal={metricGoal} />
         )}
         {page === "dom" && (
           <SegmentPage
@@ -242,7 +232,7 @@ export default function SiteShell({
               ["Согласуем заранее", "Объём, технология и стоимость работ известны до подключения установки."],
             ]}
             openModal={openModal}
-            phoneClick={phoneClick}
+
             metricGoal={metricGoal}
           />
         )}
@@ -271,18 +261,18 @@ export default function SiteShell({
               ["Закрываем документально", "Работаем по договору, оформляем согласованные акты и фотофиксацию."],
             ]}
             openModal={openModal}
-            phoneClick={phoneClick}
+
             metricGoal={metricGoal}
           />
         )}
         {page === "blog" && <MaterialsPage />}
         {page === "contacts" && (
-          <ContactsPage openModal={openModal} phoneClick={phoneClick} metricGoal={metricGoal} />
+          <ContactsPage openModal={openModal} metricGoal={metricGoal} />
         )}
         {page === "article" && article && <ArticlePage article={article} openModal={openModal} />}
       </main>
 
-      <FinalCallToAction page={page} openModal={openModal} phoneClick={phoneClick} />
+      <FinalCallToAction page={page} openModal={openModal} />
 
       <footer className="site-footer">
         <div className="footer-brand">
@@ -293,9 +283,9 @@ export default function SiteShell({
         </div>
         <div className="footer-contact">
           <small>Связаться</small>
-          <a href={PHONE_HREF} onClick={() => phoneClick("footer")}>
-            {PHONE}
-          </a>
+          <button type="button" className="footer-request" onClick={() => openModal("footer")}>
+            Оставить заявку
+          </button>
           <a href={"mailto:" + EMAIL}>{EMAIL}</a>
         </div>
         <div className="footer-legal">
@@ -312,9 +302,6 @@ export default function SiteShell({
       </footer>
 
       <div className="mobile-bar" aria-label="Быстрая связь">
-        <a href={PHONE_HREF} onClick={() => phoneClick("mobile_bar")}>
-          Позвонить
-        </a>
         <button type="button" onClick={() => openModal("mobile_bar")}>
           Получить расчёт
         </button>
@@ -351,12 +338,10 @@ export default function SiteShell({
 function HomePage({
   page,
   openModal,
-  phoneClick,
   metricGoal,
 }: {
   page: PageName;
   openModal: (placement: string) => void;
-  phoneClick: (placement: string) => void;
   metricGoal: MetricGoal;
 }) {
   return (
@@ -374,7 +359,7 @@ function HomePage({
             <li>Расчёт и технология до начала работ</li>
             <li>Для частных домов, УК и организаций</li>
           </ul>
-          <ConversionActions placement="hero" openModal={openModal} phoneClick={phoneClick} />
+          <ConversionActions placement="hero" openModal={openModal} />
           <p className="hero-note">Выезд для осмотра и расчёта стоимости — бесплатно.</p>
         </div>
         <div className="hero-conversion">
@@ -464,7 +449,6 @@ function SegmentPage({
   services,
   benefits,
   openModal,
-  phoneClick,
   metricGoal,
 }: {
   page: PageName;
@@ -477,7 +461,6 @@ function SegmentPage({
   services: string[];
   benefits: string[][];
   openModal: (placement: string) => void;
-  phoneClick: (placement: string) => void;
   metricGoal: MetricGoal;
 }) {
   return (
@@ -487,7 +470,7 @@ function SegmentPage({
           <p className="eyebrow">{eyebrow}</p>
           <h1>{title}</h1>
           <p className="hero-lead">{intro}</p>
-          <ConversionActions placement={page + "_hero"} openModal={openModal} phoneClick={phoneClick} />
+          <ConversionActions placement={page + "_hero"} openModal={openModal} />
           <p className="hero-note">Выезд для осмотра и расчёта стоимости — бесплатно.</p>
         </div>
         <div className="hero-conversion">
@@ -569,11 +552,9 @@ function MaterialsPage() {
 
 function ContactsPage({
   openModal,
-  phoneClick,
   metricGoal,
 }: {
   openModal: (placement: string) => void;
-  phoneClick: (placement: string) => void;
   metricGoal: MetricGoal;
 }) {
   return (
@@ -585,11 +566,8 @@ function ContactsPage({
       </div>
       <div className="contacts-layout">
         <div className="contact-primary">
-          <small>Телефон специалиста</small>
-          <a href={PHONE_HREF} onClick={() => phoneClick("contacts_main")}>
-            {PHONE}
-          </a>
-          <p>Если удобнее, оставьте номер — перезвоним и уточним исходные данные.</p>
+          <small>Заявка специалисту</small>
+          <p>Оставьте номер в форме. Свяжемся с вами и уточним исходные данные.</p>
           <button type="button" className="button primary" onClick={() => openModal("contacts_main")}>
             Получить расчёт стоимости
           </button>
@@ -777,20 +755,15 @@ function Faq() {
 function ConversionActions({
   placement,
   openModal,
-  phoneClick,
 }: {
   placement: string;
   openModal: (placement: string) => void;
-  phoneClick: (placement: string) => void;
 }) {
   return (
     <div className="conversion-actions">
       <button type="button" className="button primary" onClick={() => openModal(placement)}>
         Получить расчёт стоимости
       </button>
-      <a className="button secondary" href={PHONE_HREF} onClick={() => phoneClick(placement)}>
-        Позвонить {PHONE}
-      </a>
     </div>
   );
 }
@@ -1076,11 +1049,9 @@ function LeadModal({
 function FinalCallToAction({
   page,
   openModal,
-  phoneClick,
 }: {
   page: PageName;
   openModal: (placement: string) => void;
-  phoneClick: (placement: string) => void;
 }) {
   return (
     <section className="final-cta">
@@ -1089,7 +1060,7 @@ function FinalCallToAction({
         <h2>Осмотрим объект и рассчитаем стоимость</h2>
         <p>Уточним задачу, проверим возможность промывки и предложим следующий шаг.</p>
       </div>
-      <ConversionActions placement={page + "_final"} openModal={openModal} phoneClick={phoneClick} />
+      <ConversionActions placement={page + "_final"} openModal={openModal} />
     </section>
   );
 }

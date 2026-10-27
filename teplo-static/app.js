@@ -110,7 +110,7 @@ function deliverThroughCompanyBrowser(payload){
     const id=payload.requestId;
     let started=false;
     const cleanup=()=>{clearTimeout(timer);window.removeEventListener('message',receive);frame.remove();};
-    const fail=()=>{cleanup();reject(new Error('Заявка сохранена, но доставка специалисту пока не подтверждена. Повторите попытку или позвоните: +7 993 106-04-23.'));};
+    const fail=()=>{cleanup();reject(new Error('Заявка сохранена, но доставка специалисту пока не подтверждена. Повторите отправку через несколько минут.'));};
     function receive(event){
       if(event.origin!==origin||event.source!==frame.contentWindow)return;
       if(event.data?.type==='teplo-relay-ready'&&!started){started=true;frame.contentWindow.postMessage({type:'teplo-lead',id,payload},origin);}
@@ -139,7 +139,7 @@ form.addEventListener('submit',async event=>{
   try{
     const response=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,archiveOnly:true}),signal:AbortSignal.timeout(25000)});
     const result=await response.json();
-    if(!response.ok||!result.id||(!result.saved&&result.delivery!=='confirmed'))throw new Error(result.error||'Не удалось сохранить заявку. Повторите попытку или позвоните нам.');
+    if(!response.ok||!result.id||(!result.saved&&result.delivery!=='confirmed'))throw new Error(result.error||'Не удалось сохранить заявку. Проверьте соединение и повторите отправку.');
     if(result.delivery!=='confirmed'&&result.delivery!=='queued'){
       await deliverThroughCompanyBrowser({...payload,leadId:result.id,message:[fields.topic,fields.message].filter(Boolean).join('\n')});
       fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,browserRelayReceipt:true,receiptId:result.id}),keepalive:true}).catch(()=>{});
@@ -151,7 +151,7 @@ form.addEventListener('submit',async event=>{
     track(result.delivery==='queued'?'lead_accepted':'lead_sent',{place:formPlace,object_type:fields.clientType,topic:fields.topic});
     form.reset();
   }catch(error){
-    errorBox.textContent=error.name==='TimeoutError'||error instanceof TypeError?'Не удалось получить подтверждение. Проверьте соединение и повторите отправку или позвоните: +7 993 106-04-23.':error.message;
+    errorBox.textContent=error.name==='TimeoutError'||error instanceof TypeError?'Не удалось получить подтверждение. Проверьте соединение и повторите отправку.':error.message;
     errorBox.hidden=false;track('lead_error',{place:formPlace});
   }finally{sending=false;submitButton.disabled=false;submitButton.textContent='Отправить заявку';form.removeAttribute('aria-busy');}
 });
