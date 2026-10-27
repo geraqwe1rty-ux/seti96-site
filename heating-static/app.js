@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const form=document.querySelector('#heating-form'),errorBox=document.querySelector('#form-error'),submit=form.querySelector('[type="submit"]');
-  const notice=document.querySelector('#cookie-notice'),choiceKey='heating-analytics-v1',counter=111900032;
+  const notice=document.querySelector('#cookie-notice'),choiceKey='heating-analytics-v1',counter=113822833;
   let enabled=false,loaded=false,sending=false,requestId='',payloadKey='',started=false;
   function startAnalytics(){
     if(enabled)return;enabled=true;
@@ -9,7 +9,7 @@
       window.ym=window.ym||function(){(window.ym.a=window.ym.a||[]).push(arguments)};window.ym.l=Date.now();
       const script=document.createElement('script');script.async=true;script.src='https://mc.yandex.ru/metrika/tag.js?id='+counter;document.head.append(script);loaded=true;
     }
-    window.ym(counter,'init',{clickmap:true,trackLinks:true,accurateTrackBounce:true,webvisor:true});
+    window.ym(counter,'init',{ssr:true,webvisor:true,clickmap:true,ecommerce:'dataLayer',referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});
     window.ym(counter,'getClientID',id=>{window.seti96MetrikaClientId=String(id||'')});
   }
   function track(name,details={}){if(enabled)window.ym(counter,'reachGoal',name,{variant:'heating-one-screen',...details})}

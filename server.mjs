@@ -163,7 +163,7 @@ async function deliverPrimaryLeadDirectly(lead) {
   }
 }
 
-app.get("/health", (req, res) => res.json({ok: true, release: "heating-landing-20261027-v1", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
+app.get("/health", (req, res) => res.json({ok: true, release: "heating-metrika-113822833-v1", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir)), ...(await readHeatingLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
 app.use(["/api/leads", "/api/heating-leads"], (req,res,next)=>(isHeatingHost(req)||isTeploHost(req))?receipts.attach(req,res,next):next());
