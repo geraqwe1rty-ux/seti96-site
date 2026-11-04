@@ -1,5 +1,6 @@
 import express from "express";
 import {createAkciaHandler} from "./akcia-site.mjs";
+import {createAkciaBookings,readAkciaBookings} from "./akcia-bookings.mjs";
 import {createProxyMiddleware} from "http-proxy-middleware";
 import {spawn} from "node:child_process";
 import {mkdir, readFile, rename, writeFile} from "node:fs/promises";
@@ -27,9 +28,17 @@ const heatingDir = path.resolve("heating-static");
 const thanksTemplate = await readFile(path.resolve("lead-thanks.html"), "utf8");
 const receipts = createLeadReceipts();
 const app = express();
-app.use(createAkciaHandler({staticMiddleware: express.static(path.resolve("akcia-static"), {index: "index.html", maxAge: 0, dotfiles: "deny"})}));
+const akciaBookings=createAkciaBookings({dataDir,deliverDirect:deliverPrimaryLeadDirectly});
+const akciaJson=express.json({limit:'4kb'});
+app.use(createAkciaHandler({
+  bookingHandler:(req,res,next)=>akciaJson(req,res,error=>error?res.status(error.status===413?413:400).json({error:'Не удалось прочитать заявку. Проверьте данные формы.'}):akciaBookings.handler(req,res)),
+  staticMiddleware: express.static(path.resolve("akcia-static"), {index: "index.html", maxAge: 0, dotfiles: "deny"})
+}));
 
 await mkdir(dataDir, {recursive: true});
+const drainAkcia=()=>akciaBookings.drain().catch(error=>console.error('Akcia retry failed',error?.code||'storage_error'));
+setInterval(drainAkcia,15000).unref();
+void drainAkcia();
 
 async function readLeads() {
   try { return JSON.parse(await readFile(leadsFile, "utf8")); }
@@ -146,7 +155,7 @@ async function deliverPrimaryLeadDirectly(lead) {
     ["yclid", lead.yclid],
   ].filter(([, value]) => value);
   const text = [
-    `<b>Новая заявка с ${lead.source === "teplo.seti96.ru" ? "teplo.seti96.ru" : lead.source === "santehnika.seti96.ru" ? "santehnika.seti96.ru" : lead.source === "uslugi.seti96.ru" ? "uslugi.seti96.ru" : "seti96.ru"}</b>`,
+    `<b>Новая заявка с ${lead.source === "akcia.seti96.ru" ? "akcia.seti96.ru" : lead.source === "teplo.seti96.ru" ? "teplo.seti96.ru" : lead.source === "santehnika.seti96.ru" ? "santehnika.seti96.ru" : lead.source === "uslugi.seti96.ru" ? "uslugi.seti96.ru" : "seti96.ru"}</b>`,
     ...(lead.service ? [`<b>Услуга:</b> ${escapeHtml(lead.service)}`] : []),
     ...details.map(([label, value]) => `<b>${label}:</b> ${escapeHtml(value)}`),
   ].join("\n").slice(0, 4000);
@@ -167,7 +176,7 @@ async function deliverPrimaryLeadDirectly(lead) {
 
 app.get("/health", (req, res) => res.json({ok: true, release: "forms-only-metrika-20261027-v1", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
 app.use("/admin", protect);
-app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir)), ...(await readHeatingLeads(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
+app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir)), ...(await readHeatingLeads(dataDir)), ...(await readAkciaBookings(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
 app.use(["/api/leads", "/api/heating-leads"], (req,res,next)=>(isHeatingHost(req)||isTeploHost(req))?receipts.attach(req,res,next):next());
 const teploDirectReady=Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim());
 const teploOutbox=createTeploOutbox({dataDir,deliverDirect:deliverPrimaryLeadDirectly});

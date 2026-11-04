@@ -4,6 +4,7 @@ import { ArrowRight, ArrowUpRight, Check, CheckCircle2, CalendarDays, MapPin, Sc
 import { campaign } from '../lib/campaign';
 import { trackPromoGoal, trackSavedLead } from '../lib/analytics';
 import AnalyticsChoice from './analytics-choice';
+import {submitBooking} from '../lib/submit-booking';
 function newRequestId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = (bytes[6] & 15) | 64;
@@ -29,9 +30,7 @@ export default function Home({bookingEndpoint = '/api/booking', heroSrc = '/hero
     const id = requestId || newRequestId(); setRequestId(id);
     setState('sending'); setError('');
     try {
-      const res = await fetch(bookingEndpoint, { method: 'POST', credentials:'omit', headers: {'Content-Type':'application/json'}, body: JSON.stringify({town: townId, phone: form.get('phone'), address: form.get('address'), consent: form.get('consent') === 'on', website: form.get('website'), requestId: id}) });
-      const body = await res.json() as { ok?: boolean; error?: string; reference?: string };
-      if (!res.ok || !body.ok) throw new Error(body.error || 'Не удалось отправить заявку. Попробуйте ещё раз.');
+      const body = await submitBooking(bookingEndpoint,{town:townId,phone:form.get('phone'),address:form.get('address'),consent:form.get('consent')==='on',website:form.get('website'),requestId:id});
       setReference(body.reference || id.slice(0, 8).toUpperCase()); setState('success');
       trackSavedLead(id, townId);
       document.getElementById('booking-status')?.focus();
@@ -73,7 +72,7 @@ export default function Home({bookingEndpoint = '/api/booking', heroSrc = '/hero
         <h2 id="schedule-title">Выберите свой<br/>населённый пункт</h2>
         <p className="section-intro">Объединяем заявки в один маршрут, чтобы предложить обследование за 800 ₽.</p>
         <div className="schedule-list" role="group" aria-label="Расписание выездов">
-          {campaign.towns.map((t, index) => <button key={t.id} className={'schedule-row '+(townId === t.id ? 'selected' : '')} onClick={() => {selectTown(t.id); if (window.innerWidth < 800) document.getElementById('booking')?.scrollIntoView({behavior:'smooth'});}} aria-pressed={townId===t.id}>
+          {campaign.towns.map((t, index) => <button key={t.id} className={'schedule-row '+(townId === t.id ? 'selected' : '')} disabled={state==='sending'} onClick={() => {selectTown(t.id); if (window.innerWidth < 800) document.getElementById('booking')?.scrollIntoView({behavior:'smooth'});}} aria-pressed={townId===t.id}>
             <span className="date-box"><strong>{String(t.day).padStart(2,'0')}</strong><span>ноября</span></span>
             <span className="town-copy"><strong>{t.name}</strong><small>{t.weekday} · 10:00–18:00</small></span>
             <span className="row-arrow">{townId===t.id?<Check size={20}/>:<ArrowUpRight size={21}/>}</span>
@@ -87,12 +86,12 @@ export default function Home({bookingEndpoint = '/api/booking', heroSrc = '/hero
         <p className="form-intro">Оставьте контакты. Мы свяжемся с вами и согласуем выезд.</p>
         {state === 'success' ? <div className="success-panel ym-hide-content" id="booking-status" tabIndex={-1} role="status"><CheckCircle2 size={44}/><h3>Заявка принята</h3><p>{town?.name}, предварительно {town?.day} ноября.</p><p>Мы позвоним на указанный номер и подтвердим время. До звонка запись считается предварительной.</p><small>Номер заявки: {reference}</small><button className="button secondary" onClick={() => {setState('idle'); setRequestId(''); leadStarted.current = false;}}>Записать другой адрес <ArrowRight size={18}/></button></div> : <form className="ym-hide-content ym-disable-submit" onFocusCapture={startLead} onSubmit={submit}>
           <label htmlFor="town">Населённый пункт <span>*</span></label>
-          <div className="select-wrap"><select id="town" name="town" value={townId} onChange={e=>selectTown(e.target.value)} required><option value="" disabled>Выберите из списка</option>{campaign.towns.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select><ChevronDown size={18}/></div>
+          <div className="select-wrap"><select id="town" name="town" disabled={state==='sending'} value={townId} onChange={e=>selectTown(e.target.value)} required><option value="" disabled>Выберите из списка</option>{campaign.towns.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select><ChevronDown size={18}/></div>
           <div className={'date-notice '+(town?'active':'')} aria-live="polite"><CalendarDays size={17}/>{town?`${town.day} ноября · 10:00–18:00`:'Дата появится после выбора пункта'}</div>
           <label htmlFor="phone">Телефон <span>*</span></label>
-          <input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+7 (___) ___-__-__" required minLength={10} maxLength={22} onChange={()=>setError('')}/>
+          <input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+7 (___) ___-__-__" required minLength={10} maxLength={22} disabled={state==='sending'} onChange={()=>{setError('');setRequestId('');}}/>
           <label htmlFor="address">Адрес <span>*</span></label>
-          <input id="address" name="address" autoComplete="street-address" placeholder="Улица, номер дома" required minLength={5} maxLength={250} onChange={()=>setError('')}/>
+          <input id="address" name="address" autoComplete="street-address" placeholder="Улица, номер дома" required minLength={5} maxLength={250} disabled={state==='sending'} onChange={()=>{setError('');setRequestId('');}}/>
           <div className="honeypot" aria-hidden="true"><label htmlFor="website">Сайт</label><input id="website" name="website" tabIndex={-1} autoComplete="off"/></div>
           <label className="consent"><input name="consent" type="checkbox" required/><span>Даю <a href="https://teplo.seti96.ru/consent" target="_blank" rel="noreferrer">согласие на обработку данных</a> и принимаю <a href="https://teplo.seti96.ru/policy" target="_blank" rel="noreferrer">политику конфиденциальности</a>.</span></label>
           {error&&<p className="form-error" role="alert">{error}</p>}
