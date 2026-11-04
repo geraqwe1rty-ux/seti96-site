@@ -1,4 +1,5 @@
 import express from "express";
+import {createAkciaHandler} from "./akcia-site.mjs";
 import {createProxyMiddleware} from "http-proxy-middleware";
 import {spawn} from "node:child_process";
 import {mkdir, readFile, rename, writeFile} from "node:fs/promises";
@@ -26,6 +27,7 @@ const heatingDir = path.resolve("heating-static");
 const thanksTemplate = await readFile(path.resolve("lead-thanks.html"), "utf8");
 const receipts = createLeadReceipts();
 const app = express();
+app.use(createAkciaHandler({staticMiddleware: express.static(path.resolve("akcia-static"), {index: "index.html", maxAge: 0, dotfiles: "deny"})}));
 
 await mkdir(dataDir, {recursive: true});
 
@@ -355,4 +357,5 @@ function stop(signal) { child.kill(signal); server.close(() => process.exit(0));
 process.on("SIGTERM", () => stop("SIGTERM"));
 process.on("SIGINT", () => stop("SIGINT"));
 child.on("exit", code => { if (code) process.exit(code); });
+
 
