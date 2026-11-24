@@ -26,14 +26,14 @@ test('owner issues and revokes an independent password; the report exposes only 
   app.get('/api/leads',protectOwner,(_req,res)=>res.json(leads));
   const server = await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
   t.after(()=>new Promise(resolve=>server.close(resolve)));
-  function request(route, auth='', method='GET', origin='https://seti96.ru') {
+  function request(route, auth='', method='GET', origin='https://seti96.ru',body='') {
     return new Promise((resolve,reject)=>{
-      const req = http.request({hostname:'127.0.0.1',port:server.address().port,path:route,method,headers:{host:'seti96.ru',origin,authorization:auth}}, async res=>{
+      const req = http.request({hostname:'127.0.0.1',port:server.address().port,path:route,method,headers:{host:'seti96.ru',origin,authorization:auth,'content-type':'application/x-www-form-urlencoded'}}, async res=>{
         const chunks = [];
         for await (const chunk of res) chunks.push(chunk);
         resolve({status:res.statusCode, headers:new Headers(res.headers), text:()=>Buffer.concat(chunks).toString()});
       });
-      req.on('error',reject).end();
+      req.on('error',reject).end(body);
     });
   }
   const control='/admin/direct-access';
@@ -62,4 +62,18 @@ test('owner issues and revokes an independent password; the report exposes only 
   assert.equal((await request('/api/leads',owner)).status,200);
   assert.equal((await request(control+'/revoke',owner,'POST')).status,303);
   assert.equal((await request('/direct',reader)).status,401);
+  const setup='/admin/direct-access/issue';
+  const prepared='only-test-A7c9Zr1Q9aBx_123';
+  const payload=new URLSearchParams({password:prepared}).toString();
+  const canonical='https://seti96.ru';
+  assert.equal((await request(setup,reader,'POST',canonical,payload)).status,401);
+  assert.equal((await request(setup,owner,'POST',canonical,'password=short')).status,400);
+  assert.equal((await request(setup,owner,'POST',canonical,payload)).status,200);
+  const preparedReader=basic('directolog',prepared);
+  assert.equal((await request('/direct',preparedReader)).status,200);
+  assert.equal((await request('/api/leads',preparedReader)).status,401);
+  assert.equal((await request(setup,owner,'POST',canonical,'password=other-secure-test-password-123456')).status,303);
+  assert.equal((await request('/direct',preparedReader)).status,200);
+  assert.equal((await request(control+'/revoke',owner,'POST')).status,303);
+  assert.equal((await request('/direct',preparedReader)).status,401);
 });

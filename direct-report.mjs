@@ -1,6 +1,7 @@
 import {createHash, randomBytes, timingSafeEqual} from 'node:crypto';
 import {readFile, rm, writeFile} from 'node:fs/promises';
 import path from 'node:path';
+import express from 'express';
 
 const sites = new Map([
   ['seti96.ru', ['Основной сайт', 111900032]],
@@ -65,7 +66,7 @@ function table(head, rows, empty) {
 
 function page(title, body) {
   return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(title) +
-    ' · Сети96</title><style>*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#172936;font:16px/1.5 Inter,Arial,sans-serif}main{max-width:1150px;margin:auto;padding:32px 20px}header{display:flex;align-items:baseline;gap:18px;border-bottom:2px solid #066452;padding-bottom:16px}h1{font-size:clamp(23px,4vw,32px);margin:0}h2{font-size:21px;margin:28px 0 10px}form{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:20px 0}label{display:grid;gap:4px}button,select{font:inherit;border:1px solid #a9b6c1;border-radius:6px;background:white;padding:8px 12px}button{background:#125c51;color:white;cursor:pointer}a{color:#075b86}table{border-collapse:collapse;min-width:560px;width:100%;background:#fff}td,th{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid #dee4e8;overflow-wrap:anywhere}th{font-size:14px;color:#3e5667}.scroll{overflow:auto}small{color:#526676}nav a{margin-right:14px}code{user-select:all;font-size:16px;overflow-wrap:anywhere}details{margin:20px 0}summary{cursor:pointer}</style><main><header><b>Сети96</b><h1>' + esc(title) + '</h1></header>' + body + '</main></html>';
+    ' · Сети96</title><style>*{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#172936;font:16px/1.5 Inter,Arial,sans-serif}main{max-width:1150px;margin:auto;padding:32px 20px}header{display:flex;align-items:baseline;gap:18px;border-bottom:2px solid #066452;padding-bottom:16px}h1{font-size:clamp(23px,4vw,32px);margin:0}h2{font-size:21px;margin:28px 0 10px}form{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:20px 0}label{display:grid;gap:4px}button,select,input{font:inherit;border:1px solid #a9b6c1;border-radius:6px;background:white;padding:8px 12px}button{background:#125c51;color:white;cursor:pointer}a{color:#075b86}table{border-collapse:collapse;min-width:560px;width:100%;background:#fff}td,th{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid #dee4e8;overflow-wrap:anywhere}th{font-size:14px;color:#3e5667}.scroll{overflow:auto}small{color:#526676}nav a{margin-right:14px}code{user-select:all;font-size:16px;overflow-wrap:anywhere}details{margin:20px 0}summary{cursor:pointer}</style><main><header><b>Сети96</b><h1>' + esc(title) + '</h1></header>' + body + '</main></html>';
 }
 
 function report(leads, query) {
@@ -120,17 +121,23 @@ export function registerDirectReport(app, {dataDir, readLeads, protectOwner}) {
   const loginInfo = '<p>Адрес для специалиста: <a href="https://seti96.ru/direct">https://seti96.ru/direct</a><br>Логин: <b>directolog</b></p>';
   app.get(ownerPath,async (_req,res)=>{
     const active = Boolean(await currentHash());
-    res.send(page('Доступ директолога',loginInfo+'<p>'+(active?'Доступ включён.':'Доступ пока выключен.')+'</p>'+
-      '<form method="post" action="'+ownerPath+'/'+(active?'revoke':'issue')+'"><button>'+(active?'Отозвать доступ':'Создать пароль')+'</button></form>'));
+    const form = active
+      ? '<form method="post" action="'+ownerPath+'/revoke"><button>Отозвать доступ</button></form>'
+      : '<form method="post" action="'+ownerPath+'/issue"><label>Подготовленный пароль (необязательно)<input type="password" name="password" minlength="20" maxlength="128" autocomplete="new-password" aria-describedby="password-tip"></label><button>Включить доступ</button></form><p id="password-tip"><small>Вставьте подготовленный пароль или оставьте поле пустым, чтобы создать новый.</small></p>';
+    res.send(page('Доступ директолога',loginInfo+'<p>'+(active?'Доступ включён.':'Доступ пока выключен.')+'</p>'+form));
   });
-  app.post(ownerPath+'/:action', async (req,res)=>{
+  app.post(ownerPath+'/:action', express.urlencoded({extended:false,limit:'1kb'}), async (req,res)=>{
     if (req.headers.origin !== 'https://seti96.ru' || req.hostname !== 'seti96.ru') return res.sendStatus(403);
     if (req.params.action === 'revoke') {
       await rm(file,{force:true});
       return res.redirect(303,ownerPath);
     }
     if (req.params.action !== 'issue') return res.sendStatus(404);
-    const password = randomBytes(24).toString('base64url');
+    const supplied = req.body?.password ?? '';
+    if (typeof supplied !== 'string' || (supplied && !/^[A-Za-z0-9_-]{20,128}$/.test(supplied))) {
+      return res.status(400).send(page('Проверьте пароль','<p>Введите от 20 до 128 латинских букв, цифр, дефисов или знаков подчёркивания.</p><a href="'+ownerPath+'">Вернуться</a>'));
+    }
+    const password = supplied || randomBytes(24).toString('base64url');
     // Exclusive creation prevents a double click or a retry from replacing a valid password.
     try { await writeFile(file,passwordHash(password).toString('hex'),{mode:0o600,flag:'wx',flush:true}); }
     catch (e) { if (e.code==='EEXIST') return res.redirect(303,ownerPath); throw e; }
