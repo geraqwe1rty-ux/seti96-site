@@ -1,3 +1,4 @@
+import {registerDirectReport} from "./direct-report.mjs";
 import express from "express";
 import {createAkciaHandler} from "./akcia-site.mjs";
 import {createAkciaBookings,readAkciaBookings} from "./akcia-bookings.mjs";
@@ -175,8 +176,13 @@ async function deliverPrimaryLeadDirectly(lead) {
 }
 
 app.get("/health", (req, res) => res.json({ok: true, release: "forms-only-metrika-20261027-v1", ...(isTeploHost(req) ? {telegram_configured: Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim())} : {})}));
+async function allLeads() {
+  const groups = await Promise.all([readLeads(), readUslugiLeads(dataDir), readTeploLeads(dataDir), readHeatingLeads(dataDir), readAkciaBookings(dataDir)]);
+  return groups.flat().sort((a,b)=>b.created_at.localeCompare(a.created_at));
+}
+registerDirectReport(app,{dataDir,readLeads:allLeads,protectOwner:protect});
 app.use("/admin", protect);
-app.get("/api/leads", protect, async (_req, res) => res.json([...(await readLeads()), ...(await readUslugiLeads(dataDir)), ...(await readTeploLeads(dataDir)), ...(await readHeatingLeads(dataDir)), ...(await readAkciaBookings(dataDir))].sort((a,b)=>b.created_at.localeCompare(a.created_at))));
+app.get("/api/leads", protect, async (_req, res) => res.json(await allLeads()));
 app.use(["/api/leads", "/api/heating-leads"], (req,res,next)=>(isHeatingHost(req)||isTeploHost(req))?receipts.attach(req,res,next):next());
 const teploDirectReady=Boolean(String(process.env.TELEGRAM_BOT_TOKEN || "").trim() && String(process.env.TELEGRAM_CHAT_ID || "").trim());
 const teploOutbox=createTeploOutbox({dataDir,deliverDirect:deliverPrimaryLeadDirectly});
