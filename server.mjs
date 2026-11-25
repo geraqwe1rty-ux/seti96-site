@@ -1,5 +1,6 @@
 import {registerDirectReport} from "./direct-report.mjs";
 import express from "express";
+import {readAccounts, matchesAccount} from "./site-accounts.mjs";
 import {createAkciaHandler} from "./akcia-site.mjs";
 import {createAkciaBookings,readAkciaBookings} from "./akcia-bookings.mjs";
 import {createProxyMiddleware} from "http-proxy-middleware";
@@ -29,6 +30,7 @@ const heatingDir = path.resolve("heating-static");
 const thanksTemplate = await readFile(path.resolve("lead-thanks.html"), "utf8");
 const receipts = createLeadReceipts();
 const app = express();
+const accounts = readAccounts(process.env.SETI96_ACCOUNTS);
 app.get("/network-metrika.js", (_req, res) => res.sendFile(path.resolve("network-metrika.js")));
 const akciaBookings=createAkciaBookings({dataDir,deliverDirect:deliverPrimaryLeadDirectly});
 const akciaJson=express.json({limit:'4kb'});
@@ -54,13 +56,15 @@ async function writeLeads(leads) {
 }
 
 function authorized(req) {
+  if (matchesAccount(req.headers.authorization, "german", accounts?.owner)) return true;
   const expectedUser = process.env.ADMIN_USERNAME;
   const expectedPassword = process.env.ADMIN_PASSWORD;
   if (!expectedUser || !expectedPassword) return false;
   const value = req.headers.authorization || "";
   if (!value.startsWith("Basic ")) return false;
-  const [user, password] = Buffer.from(value.slice(6), "base64").toString().split(":");
-  return user === expectedUser && password === expectedPassword;
+  const pair = Buffer.from(value.slice(6), "base64").toString("utf8");
+  const split = pair.indexOf(":");
+  return split >= 0 && pair.slice(0, split) === expectedUser && pair.slice(split + 1) === expectedPassword;
 }
 
 function protect(req, res, next) {
@@ -181,7 +185,7 @@ async function allLeads() {
   const groups = await Promise.all([readLeads(), readUslugiLeads(dataDir), readTeploLeads(dataDir), readHeatingLeads(dataDir), readAkciaBookings(dataDir)]);
   return groups.flat().sort((a,b)=>b.created_at.localeCompare(a.created_at));
 }
-registerDirectReport(app,{dataDir,readLeads:allLeads,protectOwner:protect});
+registerDirectReport(app,{dataDir,readLeads:allLeads,protectOwner:protect,configuredDirector:accounts?.director});
 app.use("/admin", protect);
 app.get("/api/leads", protect, async (_req, res) => res.json(await allLeads()));
 app.use(["/api/leads", "/api/heating-leads"], (req,res,next)=>(isHeatingHost(req)||isTeploHost(req))?receipts.attach(req,res,next):next());

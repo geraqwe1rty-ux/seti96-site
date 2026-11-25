@@ -37,7 +37,10 @@ test('owner issues and revokes an independent password; the report exposes only 
     });
   }
   const control='/admin/direct-access';
-  assert.equal((await request('/direct')).status,401);
+  const inactive=await request('/direct');
+  assert.equal(inactive.status,401);
+  assert.equal(inactive.headers.get('www-authenticate'),null);
+  assert.match(inactive.text(),/Доступ пока не включён/);
   assert.equal((await request(control)).status,401);
   assert.equal((await request(control+'/issue',owner,'POST','https://other.example')).status,403);
   const result=await request(control+'/issue',owner,'POST');

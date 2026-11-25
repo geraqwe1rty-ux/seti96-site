@@ -1,6 +1,7 @@
-import {createHash, randomBytes, timingSafeEqual} from 'node:crypto';
+import {createHash, randomBytes} from 'node:crypto';
 import {readFile, rm, writeFile} from 'node:fs/promises';
 import path from 'node:path';
+import {matchesAccount} from './site-accounts.mjs';
 import express from 'express';
 
 const sites = new Map([
@@ -106,9 +107,10 @@ function report(leads, query) {
     '<details><summary>Посещаемость и расходы на рекламу</summary><p>Посещения и цели доступны в Яндекс Метрике под вашим логином. Расходы по кампаниям — в <a href="https://direct.yandex.ru/">Яндекс Директе</a>.</p><p><a href="https://metrika.yandex.ru/dashboard?id=111900032">Общий счётчик всех сайтов · 111900032</a></p><ul>'+metrics+'</ul></details>');
 }
 
-export function registerDirectReport(app, {dataDir, readLeads, protectOwner}) {
+export function registerDirectReport(app, {dataDir, readLeads, protectOwner, configuredDirector}) {
   const file = path.join(dataDir, 'direct-access.sha256');
   async function currentHash() {
+    if (configuredDirector) return configuredDirector === 'off' ? '' : configuredDirector;
     try { return (await readFile(file,'utf8')).trim(); }
     catch (e) { if (e.code === 'ENOENT') return ''; throw e; }
   }
@@ -120,6 +122,10 @@ export function registerDirectReport(app, {dataDir, readLeads, protectOwner}) {
   app.use(ownerPath,protectOwner);
   const loginInfo = '<p>Адрес для специалиста: <a href="https://seti96.ru/direct">https://seti96.ru/direct</a><br>Логин: <b>directolog</b></p>';
   app.get(ownerPath,async (_req,res)=>{
+    if (configuredDirector) {
+      const status = configuredDirector === 'off' ? 'выключен' : 'включён';
+      return res.send(page('Доступ директолога',loginInfo+'<p>Доступ '+status+' в Timeweb. Для изменения доступа обновите SETI96_ACCOUNTS в настройках приложения.</p>'));
+    }
     const active = Boolean(await currentHash());
     const form = active
       ? '<form method="post" action="'+ownerPath+'/revoke"><button>Отозвать доступ</button></form>'
@@ -128,6 +134,7 @@ export function registerDirectReport(app, {dataDir, readLeads, protectOwner}) {
   });
   app.post(ownerPath+'/:action', express.urlencoded({extended:false,limit:'1kb'}), async (req,res)=>{
     if (req.headers.origin !== 'https://seti96.ru' || req.hostname !== 'seti96.ru') return res.sendStatus(403);
+    if (configuredDirector) return res.status(409).send(page('Доступ директолога','<p>Пароль задан в настройках приложения Timeweb.</p>'));
     if (req.params.action === 'revoke') {
       await rm(file,{force:true});
       return res.redirect(303,ownerPath);
@@ -145,10 +152,10 @@ export function registerDirectReport(app, {dataDir, readLeads, protectOwner}) {
   });
   app.get(reportPath,async (req,res)=>{
     const header = String(req.headers.authorization || '');
-    const pair = header.startsWith('Basic ') ? Buffer.from(header.slice(6),'base64').toString('utf8') : '';
     const stored = await currentHash();
-    const correct = pair.startsWith('directolog:') && /^[0-9a-f]{64}$/.test(stored) && timingSafeEqual(passwordHash(pair.slice('directolog:'.length)),Buffer.from(stored,'hex'));
-    if (!correct) return res.set('WWW-Authenticate','Basic realm="Seti96 Ads"').status(401).send('Требуется вход директолога');
+    if (!stored) return res.status(401).send(page('Вход директолога','<p>Доступ пока не включён. Попросите владельца сайта включить его и передать вам пароль.</p>'));
+    const correct = /^[0-9a-f]{64}$/.test(stored) && matchesAccount(header,'directolog',stored);
+    if (!correct) return res.set('WWW-Authenticate','Basic realm="Seti96 Ads"').status(401).send(page('Вход директолога','<p>Введите логин <b>directolog</b> и пароль для отчёта по рекламе.</p><p><a href="/direct">Повторить вход</a></p>'));
     res.send(report(await readLeads(),req.query));
   });
 }
