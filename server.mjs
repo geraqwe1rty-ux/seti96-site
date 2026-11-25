@@ -29,6 +29,7 @@ const heatingDir = path.resolve("heating-static");
 const thanksTemplate = await readFile(path.resolve("lead-thanks.html"), "utf8");
 const receipts = createLeadReceipts();
 const app = express();
+app.get("/network-metrika.js", (_req, res) => res.sendFile(path.resolve("network-metrika.js")));
 const akciaBookings=createAkciaBookings({dataDir,deliverDirect:deliverPrimaryLeadDirectly});
 const akciaJson=express.json({limit:'4kb'});
 app.use(createAkciaHandler({

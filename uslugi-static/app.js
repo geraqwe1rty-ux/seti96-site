@@ -2,17 +2,18 @@
 'use strict';
 const counter = 112564086;
 const storage = {get:k=>{try{return localStorage.getItem(k)}catch{return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
-const goal=(name,params={})=>{if(storage.get('seti96-analytics')==='yes'&&typeof window.ym==='function')window.ym(counter,'reachGoal',name,params)};
+const goal=(name,params={})=>{if(storage.get('seti96-analytics')==='yes'&&typeof window.ym==='function')for (const counterId of [counter, 111900032]) window.ym(counterId,'reachGoal',name,params)};
 function loadMetrika(){
   if(window.__seti96Metrika)return;
   window.__seti96Metrika=true;
   (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};m[i].l=1*new Date();for(var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r)return}k=e.createElement(t);a=e.getElementsByTagName(t)[0];k.async=1;k.src=r;a.parentNode.insertBefore(k,a)})(window,document,'script','https://mc.yandex.ru/metrika/tag.js?id=112564086','ym');
   window.ym(counter,'init',{ssr:true,webvisor:true,clickmap:true,ecommerce:'dataLayer',referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});
+    window.ym(111900032, 'init', {trackLinks:true, accurateTrackBounce:true, webvisor:false});
 }
 const cookieBanner=document.querySelector('.cookie-banner');
 if(storage.get('seti96-analytics')==='yes')loadMetrika();
 else if(!storage.get('seti96-analytics')&&cookieBanner)cookieBanner.hidden=false;
-document.querySelectorAll('[data-cookies]').forEach(b=>b.addEventListener('click',()=>{const value=b.dataset.cookies;storage.set('seti96-analytics',value);cookieBanner.hidden=true;if(value==='yes')loadMetrika();else if(window.__seti96Metrika){if(typeof window.ym==='function')window.ym(counter,'destruct');window.__seti96Metrika=false;location.reload()}}));
+document.querySelectorAll('[data-cookies]').forEach(b=>b.addEventListener('click',()=>{const value=b.dataset.cookies;storage.set('seti96-analytics',value);cookieBanner.hidden=true;if(value==='yes')loadMetrika();else if(window.__seti96Metrika){if(typeof window.ym==='function')for (const counterId of [counter, 111900032]) window.ym(counterId,'destruct');window.__seti96Metrika=false;location.reload()}}));
 document.querySelectorAll('[data-cookie-settings]').forEach(b=>b.addEventListener('click',()=>{cookieBanner.hidden=false;cookieBanner.querySelector('button').focus()}));
 const menu=document.querySelector('.menu-toggle'),mobile=document.querySelector('.mobile-menu');
 menu?.addEventListener('click',()=>{mobile.hidden=!mobile.hidden;menu.setAttribute('aria-expanded',String(!mobile.hidden))});

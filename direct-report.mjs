@@ -103,7 +103,7 @@ function report(leads, query) {
     '<h2>Журнал заявок</h2>'+table(['Екатеринбург','Сайт','Источник','Кампания'],list,'Нет записей.')+
     (pageCount>1 ? '<nav>'+(current>1?'<a href="'+link(current-1)+'">Назад</a>':'')+'Страница '+current+' из '+pageCount+' '+(current<pageCount?'<a href="'+link(current+1)+'">Дальше</a>':'')+'</nav>' : '')+
     '<p><small>Количество по серверному журналу. Заявки с проверочной меткой SETI-AUDIT исключены. «Без метки» означает, что источник или кампания не записаны.</small></p>'+
-    '<details><summary>Посещаемость и расходы на рекламу</summary><p>Посещения и цели доступны в Яндекс Метрике под вашим логином. Расходы по кампаниям — в <a href="https://direct.yandex.ru/">Яндекс Директе</a>.</p><ul>'+metrics+'</ul></details>');
+    '<details><summary>Посещаемость и расходы на рекламу</summary><p>Посещения и цели доступны в Яндекс Метрике под вашим логином. Расходы по кампаниям — в <a href="https://direct.yandex.ru/">Яндекс Директе</a>.</p><p><a href="https://metrika.yandex.ru/dashboard?id=111900032">Общий счётчик всех сайтов · 111900032</a></p><ul>'+metrics+'</ul></details>');
 }
 
 export function registerDirectReport(app, {dataDir, readLeads, protectOwner}) {

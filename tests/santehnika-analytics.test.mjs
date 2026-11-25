@@ -26,12 +26,15 @@ test('analytics waits for consent, and all request anchors are tracked only afte
  f.consent[0].listeners.click();assert.equal(f.scripts.length,1);
  assert.equal(f.scripts[0].src,'https://mc.yandex.ru/metrika/tag.js?id=111937544');
  f.anchors.forEach(a=>a.listeners.click());
- assert.equal(f.calls().filter(a=>a[1]==='init').length,1);
- assert.equal(f.calls().filter(a=>a[2]==='request_open').length,3);
+ assert.equal(f.calls().filter(a=>a[0]===111937544&&a[1]==='init').length,1);
+ assert.equal(f.calls().filter(a=>a[0]===111937544&&a[2]==='request_open').length,3);
+ assert.equal(f.calls().filter(a=>a[0]===111900032&&a[1]==='init').length,1);
+ assert.equal(f.calls().filter(a=>a[0]===111900032&&a[2]==='request_open').length,3);
  f.consent[1].listeners.click();const before=f.calls().length;f.anchors[1].listeners.click();assert.equal(f.calls().length,before);
- f.consent[0].listeners.click();assert.equal(f.scripts.length,1);assert.equal(f.calls().filter(a=>a[1]==='init').length,2);
+ f.consent[0].listeners.click();assert.equal(f.scripts.length,1);assert.equal(f.calls().filter(a=>a[0]===111937544&&a[1]==='init').length,2);
 });
-test('persisted refusal does not load Metrica; persisted consent starts exactly one counter',()=>{
+test('persisted refusal does not load Metrica; persisted consent starts each counter once',()=>{
  assert.equal(fixture('no').scripts.length,0);
- const f=fixture('yes');assert.equal(f.scripts.length,1);assert.equal(f.calls().filter(a=>a[1]==='init'&&a[0]===111937544).length,1);
+ const f=fixture('yes');assert.equal(f.scripts.length,1);assert.equal(f.calls().filter(a=>a[0]===111937544&&a[1]==='init').length,1);
+ assert.equal(f.calls().filter(a=>a[0]===111900032&&a[1]==='init').length,1);
 });

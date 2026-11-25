@@ -16,11 +16,12 @@
       k=e.createElement(t);a=e.getElementsByTagName(t)[0];k.async=1;k.src=r;a.parentNode.insertBefore(k,a);
     })(window,document,'script','https://mc.yandex.ru/metrika/tag.js?id=113687988','ym');
     window.ym(counter,'init',{ssr:true,webvisor:true,clickmap:true,ecommerce:'dataLayer',referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});
+    window.ym(111900032, 'init', {trackLinks:true, accurateTrackBounce:true, webvisor:false});
     loaded = true;
     window.ym(counter,'getClientID',id=>{window.seti96MetrikaClientId=String(id||'');});
   }
   window.seti96TrackGoal = (name, params={}) => {
-    if (enabled && typeof window.ym === 'function') window.ym(counter,'reachGoal',name,params);
+    if (enabled && typeof window.ym === 'function') for (const counterId of [counter, 111900032]) window.ym(counterId,'reachGoal',name,params);
   };
   let choice;
   try {choice=localStorage.getItem(choiceKey);} catch {}
@@ -31,7 +32,7 @@
     try {localStorage.setItem(choiceKey,value);} catch {}
     notice.hidden=true;
     if(value==='yes') start();
-    else {enabled=false;window.seti96MetrikaClientId='';if(loaded&&typeof window.ym==='function')window.ym(counter,'destruct');}
+    else {enabled=false;window.seti96MetrikaClientId='';if(loaded&&typeof window.ym==='function')for (const counterId of [counter, 111900032]) window.ym(counterId,'destruct');}
   }));
   document.querySelector('.analytics-settings').addEventListener('click',()=>{notice.hidden=false;notice.querySelector('button').focus();});
 })();

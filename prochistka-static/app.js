@@ -30,10 +30,11 @@ function loadMetrika() {
     k=e.createElement(t);a=e.getElementsByTagName(t)[0];k.async=1;k.src=r;a.parentNode.insertBefore(k,a);
   })(window,document,"script","https://mc.yandex.ru/metrika/tag.js?id="+METRIKA_ID,"ym");
   window.ym(METRIKA_ID,"init",{ssr:true,webvisor:true,clickmap:true,referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});
+    window.ym(111900032, 'init', {trackLinks:true, accurateTrackBounce:true, webvisor:false});
 }
 
 function trackGoal(goal, details) {
-  if (typeof window.ym === "function" && METRIKA_ID) window.ym(METRIKA_ID, "reachGoal", goal, details || {});
+  if (typeof window.ym === "function" && METRIKA_ID) for (const counterId of [METRIKA_ID, 111900032]) window.ym(counterId, "reachGoal", goal, details || {});
 }
 
 const cookieChoice = localStorage.getItem(COOKIE_KEY);

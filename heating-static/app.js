@@ -10,14 +10,15 @@
       const script=document.createElement('script');script.async=true;script.src='https://mc.yandex.ru/metrika/tag.js?id='+counter;document.head.append(script);loaded=true;
     }
     window.ym(counter,'init',{ssr:true,webvisor:true,clickmap:true,ecommerce:'dataLayer',referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true});
+    window.ym(111900032, 'init', {trackLinks:true, accurateTrackBounce:true, webvisor:false});
     window.ym(counter,'getClientID',id=>{window.seti96MetrikaClientId=String(id||'')});
   }
-  function track(name,details={}){if(enabled)window.ym(counter,'reachGoal',name,{variant:'heating-one-screen',...details})}
+  function track(name,details={}){if(enabled)for (const counterId of [counter, 111900032]) window.ym(counterId,'reachGoal',name,{variant:'heating-one-screen',...details})}
   let choice;try{choice=localStorage.getItem(choiceKey)}catch{}
   if(choice==='yes')startAnalytics();notice.hidden=choice==='yes'||choice==='no';
   document.querySelectorAll('[data-analytics]').forEach(button=>button.addEventListener('click',()=>{
     const value=button.dataset.analytics;try{localStorage.setItem(choiceKey,value)}catch{}notice.hidden=true;
-    if(value==='yes')startAnalytics();else{enabled=false;window.seti96MetrikaClientId='';if(loaded)window.ym(counter,'destruct')}
+    if(value==='yes')startAnalytics();else{enabled=false;window.seti96MetrikaClientId='';if(loaded)for (const counterId of [counter, 111900032]) window.ym(counterId,'destruct')}
   }));
   document.querySelector('#analytics-settings').addEventListener('click',()=>{notice.hidden=false;notice.querySelector('button').focus()});
   document.querySelectorAll('[data-goal]').forEach(link=>link.addEventListener('click',()=>track(link.dataset.goal)));

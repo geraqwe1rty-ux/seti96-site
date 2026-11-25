@@ -16,7 +16,7 @@ form.addEventListener("submit", async event => {
     const response = await fetch("/api/leads", {method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(payload)});
     if (!response.ok) throw new Error("delivery");
     form.hidden = true; success.hidden = false; form.reset();
-    if (typeof window.ym === "function") window.ym(111934175, "reachGoal", "lead_sent");
+    if (typeof window.ym === "function") for (const counterId of [111934175, 111900032]) window.ym(counterId, "reachGoal", "lead_sent");
   } catch {
     errorBox.textContent = "Не удалось отправить заявку. Позвоните нам по номеру +7 993 106-04-23.";
     errorBox.hidden = false;

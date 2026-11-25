@@ -24,7 +24,7 @@
       });
       if (!response.ok) throw new Error("send failed");
       form.reset();
-      if (typeof window.ym === "function") window.ym(112017198, "reachGoal", "lead_avariya");
+      if (typeof window.ym === "function") for (const counterId of [112017198, 111900032]) window.ym(counterId, "reachGoal", "lead_avariya");
       status.textContent = "Заявка отправлена. Свяжемся с вами, чтобы уточнить ситуацию.";
       status.className = "form-status success-text";
     } catch {

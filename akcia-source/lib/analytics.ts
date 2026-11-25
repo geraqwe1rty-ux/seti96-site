@@ -10,7 +10,7 @@ export function setAnalyticsEnabled(value: boolean) {
   if (typeof window === 'undefined' || value === enabled) return;
   if (!value) {
     enabled = false;
-    try { window.ym?.(METRIKA_ID, 'destruct'); } catch { /* Analytics never blocks booking. */ }
+    try { for (const id of [METRIKA_ID, 111900032]) window.ym?.(id, 'destruct'); } catch { /* Analytics never blocks booking. */ }
     return;
   }
   enabled = true;
@@ -30,6 +30,7 @@ export function setAnalyticsEnabled(value: boolean) {
       ssr: true, clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: true,
       params: { campaign: 'teplo-800-2026-11', site: 'promo' },
     });
+    window.ym(111900032, 'init', {trackLinks:true, accurateTrackBounce:true, webvisor:false});
   } catch { enabled = false; }
 }
 
@@ -38,7 +39,7 @@ export function trackPromoGoal(goal: Goal, town?: string) {
   // Only an allowlisted locality and static campaign labels reach analytics.
   const locality = ['rassokha', 'verkhnee-dubrovo', 'aramil', 'kosulino'].includes(town || '') ? town : undefined;
   try {
-    window.ym?.(METRIKA_ID, 'reachGoal', goal, {
+    for (const id of [METRIKA_ID, 111900032]) window.ym?.(id, 'reachGoal', goal, {
       campaign: 'teplo-800-2026-11', form: 'promo_booking', ...(locality ? { locality } : {}),
     });
     return typeof window.ym === 'function';

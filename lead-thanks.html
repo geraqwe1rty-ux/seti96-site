@@ -6,5 +6,9 @@ let enabled=receipt.kind==='main';try{if(receipt.kind!=='main')enabled=localStor
 if(!enabled)return;const id=thermal?113687988:receipt.kind==='landing'?113822833:111900032;
 window.ym=window.ym||function(){(window.ym.a=window.ym.a||[]).push(arguments)};window.ym.l=Date.now();const s=document.createElement('script');s.async=true;s.src='https://mc.yandex.ru/metrika/tag.js?id='+id;document.head.append(s);
 const options=receipt.kind==='landing'?{ssr:true,webvisor:true,clickmap:true,ecommerce:'dataLayer',referrer:document.referrer,url:location.href,accurateTrackBounce:true,trackLinks:true}:{trackLinks:true,accurateTrackBounce:true};
-window.ym(id,'init',options);window.ym(id,'reachGoal',thermal?(receipt.delivery==='confirmed'?'lead_sent':'lead_accepted'):'lead_success',{variant:receipt.kind,delivery:receipt.delivery});})();
+const goal=thermal?(receipt.delivery==='confirmed'?'lead_sent':'lead_accepted'):'lead_success';
+for(const counter of new Set([id,111900032])){
+  window.ym(counter,'init',counter===id?options:{trackLinks:true,accurateTrackBounce:true,webvisor:false});
+  window.ym(counter,'reachGoal',goal,{variant:receipt.kind,delivery:receipt.delivery});
+}})();
 </script></body></html>

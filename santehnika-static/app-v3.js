@@ -9,7 +9,7 @@
   let sending = false;
   let analyticsEnabled = false;
   const params = new URLSearchParams(location.search);
-  const track = goal => { if (analyticsEnabled && typeof window.ym === 'function') window.ym(counter, 'reachGoal', goal); };
+  const track = goal => { if (analyticsEnabled && typeof window.ym === 'function') for (const counterId of [counter, 111900032]) window.ym(counterId, 'reachGoal', goal); };
   function enableAnalytics() {
     if (analyticsEnabled) return;
     analyticsEnabled = true;
@@ -25,7 +25,7 @@
     try { localStorage.setItem('santehnika-analytics-v1', choice); } catch {}
     cookieNotice.hidden = true;
     if (choice === 'yes') enableAnalytics();
-    else if (analyticsEnabled) { window.ym(counter, 'destruct'); analyticsEnabled = false; }
+    else if (analyticsEnabled) { for (const counterId of [counter, 111900032]) window.ym(counterId, 'destruct'); analyticsEnabled = false; }
   }));
   document.querySelector('.cookie-settings').addEventListener('click', () => { cookieNotice.hidden = false; cookieNotice.querySelector('button').focus(); });
   const menu = document.querySelector('#mobile-menu');
